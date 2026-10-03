@@ -1,0 +1,63 @@
+.users-page {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 18px 30px;
+    background: #f6f8fc;
+    color: #16213d;
+}
+
+.users-header {
+    min-height: 82px;
+    margin: 0 -18px 18px;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    background: #fff;
+    border-bottom: 1px solid #e4e7ec;
+}
+
+.users-header h1 { margin: 0; font-size: 23px; color: #14213d; }
+.users-header p { margin: 4px 0 0; color: #667085; font-size: 13px; }
+.users-primary-btn {
+    height: 36px;
+    padding: 0 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid #1267d9;
+    border-radius: 5px;
+    background: #1267d9;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.users-primary-btn:hover { background: #0d4fa8; }
+
+.users-content { background: #fff; border: 1px solid #e4e7ec; border-radius: 8px; box-shadow: 0 2px 8px rgba(16,24,40,.05); }
+.users-table-header { min-height: 55px; padding: 10px 14px; display: flex; align-items: center; border-bottom: 1px solid #eef0f4; }
+.users-table-header h2 { margin: 0; font-size: 14px; color: #17233f; }
+.users-table-header p { margin: 3px 0 0; color: #667085; font-size: 11px; }
+.users-table-wrap { overflow-x: auto; }
+.users-table { width: 100%; min-width: 760px; border-collapse: collapse; }
+.users-table th { padding: 10px 14px; text-align: left; color: #fff; background: #123d70; font-size: 10px; font-weight: 600; }
+.users-table td { padding: 10px 14px; border-bottom: 1px solid #edf0f4; color: #344054; font-size: 12px; }
+.users-table tbody tr:hover { background: #f8fbff; }
+.users-empty { padding: 28px !important; text-align: center; color: #98a2b3 !important; }
+.users-actions { display: flex; gap: 5px; }
+.users-actions button { height: 29px; min-width: 58px; padding: 0 9px; border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; }
+.users-edit-btn { color: #1769d2; background: #e8f1ff; border: 1px solid #cfe2ff; }
+.users-delete-btn { color: #d93035; background: #ffe5e5; border: 1px solid #ffd2d2; }
+.users-badge { display: inline-flex; padding: 4px 9px; border-radius: 5px; font-size: 10px; font-weight: 700; }
+.users-badge.active { color: #16803d; background: #dcf8e1; }
+.users-badge.inactive { color: #d93035; background: #ffe1e1; }
+.users-status-text { min-height: 18px; margin: 0; padding: 10px 14px; color: #1267d9; font-size: 11px; }
+.users-status-text.error { color: #d93035; }
+
+@media (max-width: 700px) {
+    .users-header { align-items: flex-start; flex-direction: column; }
+    .users-primary-btn { width: 100%; justify-content: center; }
+}

@@ -1,0 +1,547 @@
+/* =========================================
+   PURCHASE PAGE — scoped to .page-view[data-page="purchase"]
+========================================= */
+
+.page-view[data-page="purchase"] {
+    --ps-primary: #1267d9;
+    --ps-primary-dark: #0d4fa8;
+    --ps-text-dark: #16213d;
+    --ps-text: #344054;
+    --ps-text-light: #667085;
+    --ps-border: #e4e7ec;
+    --ps-background: #f6f8fc;
+    --ps-green: #0b9b72;
+    --ps-shadow: 0 2px 8px rgba(16, 24, 40, 0.05);
+
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 18px 30px;
+    background: var(--ps-background);
+    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    color: var(--ps-text-dark);
+}
+
+.page-view[data-page="purchase"] *,
+.page-view[data-page="purchase"] *::before,
+.page-view[data-page="purchase"] *::after {
+    box-sizing: border-box;
+}
+
+.page-view[data-page="purchase"] button,
+.page-view[data-page="purchase"] input,
+.page-view[data-page="purchase"] select,
+.page-view[data-page="purchase"] textarea {
+    font-family: inherit;
+}
+
+/* MODAL */
+.page-view[data-page="purchase"] .modal-overlay {
+    display: none !important;
+}
+.page-view[data-page="purchase"] .modal-overlay.show {
+    display: flex !important;
+}
+
+/* PAGE HEADER */
+.page-view[data-page="purchase"] .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 82px;
+    margin: 0 -18px 18px;
+    padding: 14px 24px;
+    gap: 20px;
+    background: #ffffff;
+    border-bottom: 1px solid var(--ps-border);
+}
+
+.page-view[data-page="purchase"] .page-header h1 {
+    font-size: 23px;
+    font-weight: 700;
+    color: #14213d;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 0;
+}
+
+.page-view[data-page="purchase"] .page-header h1 i {
+    width: 48px;
+    height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    color: var(--ps-primary);
+    background: linear-gradient(135deg, #e6f0ff, #d8e9ff);
+    font-size: 21px;
+}
+
+.page-view[data-page="purchase"] .page-header p {
+    color: var(--ps-text-light);
+    font-size: 13px;
+    margin: 4px 0 0;
+}
+
+.page-view[data-page="purchase"] .header-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+/* BUTTONS */
+.page-view[data-page="purchase"] .btn {
+    height: 34px;
+    padding: 0 13px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.18s ease;
+    cursor: pointer;
+}
+
+.page-view[data-page="purchase"] .btn-primary {
+    background: var(--ps-primary);
+    border-color: var(--ps-primary);
+    color: #fff;
+}
+
+.page-view[data-page="purchase"] .btn-secondary {
+    color: #087b5e;
+    background: #e9f8f2;
+    border-color: #c8eee1;
+}
+
+/* FILTERS */
+.page-view[data-page="purchase"] .filter-card {
+    background: #fff;
+    border: 1px solid var(--ps-border);
+    border-radius: 8px;
+    box-shadow: var(--ps-shadow);
+    padding: 14px 18px;
+    margin-bottom: 16px;
+    width: 100%;
+}
+
+.page-view[data-page="purchase"] .filter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 43px;
+}
+
+.page-view[data-page="purchase"] .filter-header h3 {
+    color: #17233f;
+    font-size: 14px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.page-view[data-page="purchase"] .filter-header p {
+    color: var(--ps-text-light);
+    font-size: 11px;
+    margin: 4px 0 0;
+}
+
+.page-view[data-page="purchase"] .filter-toggle {
+    border: 1px solid #d0d5dd;
+    background: #fff;
+    padding: 8px 13px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--ps-text);
+    cursor: pointer;
+}
+
+.page-view[data-page="purchase"] .filters {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.1fr 1.1fr 2fr auto;
+    gap: 14px;
+    align-items: end;
+    margin-top: 14px;
+    width: 100%;
+}
+
+.page-view[data-page="purchase"] .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.page-view[data-page="purchase"] .form-group label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ps-text);
+}
+
+.page-view[data-page="purchase"] .form-group input,
+.page-view[data-page="purchase"] .form-group select,
+.page-view[data-page="purchase"] .form-group textarea {
+    height: 36px;
+    border: 1px solid #d0d5dd;
+    border-radius: 5px;
+    padding: 0 11px;
+    background: #fff;
+    color: #374151;
+    font-size: 12px;
+    outline: none;
+}
+
+.page-view[data-page="purchase"] .search-box {
+    position: relative;
+}
+
+.page-view[data-page="purchase"] .search-box i {
+    position: absolute;
+    left: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9ca3af;
+    font-size: 12px;
+}
+
+.page-view[data-page="purchase"] .search-box input {
+    width: 100%;
+    padding-left: 32px;
+}
+
+.page-view[data-page="purchase"] .apply-btn {
+    height: 36px;
+    white-space: nowrap;
+}
+
+/* TABLE */
+.page-view[data-page="purchase"] .table-card {
+    background: #fff;
+    border: 1px solid var(--ps-border);
+    border-radius: 8px;
+    box-shadow: var(--ps-shadow);
+    overflow: hidden;
+    width: 100%;
+}
+
+.page-view[data-page="purchase"] .table-header {
+    padding: 12px 14px;
+    border-bottom: 1px solid #eef0f4;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 43px;
+}
+
+.page-view[data-page="purchase"] .table-header h3 {
+    color: #17233f;
+    font-size: 14px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.page-view[data-page="purchase"] .table-header span {
+    display: block;
+    color: var(--ps-text-light);
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+.page-view[data-page="purchase"] .table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.page-view[data-page="purchase"] table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1100px;
+}
+
+.page-view[data-page="purchase"] thead {
+    background: #123d70;
+}
+
+.page-view[data-page="purchase"] th {
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0;
+    color: #ffffff;
+    white-space: nowrap;
+}
+
+.page-view[data-page="purchase"] td {
+    padding: 10px 12px;
+    border-top: 1px solid #edf0f4;
+    font-size: 12px;
+    white-space: normal;
+    overflow-wrap: break-word;
+    max-width: 150px;
+    color: var(--ps-text);
+}
+
+.page-view[data-page="purchase"] tbody tr:hover {
+    background: #f8fbff;
+}
+
+.page-view[data-page="purchase"] td strong {
+    color: #1f2937;
+}
+
+/* ACTION BUTTONS */
+.page-view[data-page="purchase"] .action-buttons {
+    display: flex;
+    gap: 5px;
+}
+
+.page-view[data-page="purchase"] .action-buttons button {
+    width: 29px;
+    height: 29px;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    color: #6b7280;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.page-view[data-page="purchase"] .tax-rate {
+    display: block;
+    margin-top: 2px;
+    color: #667085;
+    font-size: 10px;
+}
+
+.page-view[data-page="purchase"] .empty-state {
+    padding: 28px;
+    text-align: center;
+    color: #667085;
+}
+
+/* PAGINATION */
+.page-view[data-page="purchase"] .pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    color: #8a93a3;
+    font-size: 11px;
+}
+
+.page-view[data-page="purchase"] .page-buttons {
+    display: flex;
+    gap: 4px;
+}
+
+.page-view[data-page="purchase"] .page-buttons button {
+    min-width: 30px;
+    height: 30px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    border-radius: 6px;
+    color: #6b7280;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.page-view[data-page="purchase"] .page-buttons button.active {
+    background: var(--ps-primary);
+    color: #fff;
+    border-color: var(--ps-primary);
+}
+
+/* MODAL */
+.page-view[data-page="purchase"] .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 20px;
+}
+
+.page-view[data-page="purchase"] .modal {
+    width: 650px;
+    max-width: 100%;
+    max-height: calc(100vh - 40px);
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .2);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.page-view[data-page="purchase"] .modal-header {
+    padding: 20px 22px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid #edf0f5;
+}
+
+.page-view[data-page="purchase"] .modal-header h2 {
+    font-size: 19px;
+    margin: 0;
+}
+
+.page-view[data-page="purchase"] .close-modal {
+    border: none;
+    background: transparent;
+    font-size: 19px;
+    color: #9ca3af;
+    cursor: pointer;
+}
+
+.page-view[data-page="purchase"] .modal-body {
+    padding: 22px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.page-view[data-page="purchase"] .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.page-view[data-page="purchase"] .form-grid .full-width {
+    grid-column: span 2;
+}
+
+.page-view[data-page="purchase"] .modal-footer {
+    padding: 16px 22px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    border-top: 1px solid #edf0f5;
+}
+
+.page-view[data-page="purchase"] .transaction-modal form {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.page-view[data-page="purchase"] .transaction-modal output {
+    display: flex;
+    align-items: center;
+    height: 36px;
+    padding: 0 11px;
+    border: 1px solid #d0d5dd;
+    border-radius: 5px;
+    background: #f8fafc;
+    color: #17233f;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* RESPONSIVE */
+@media (max-width: 1200px) {
+    .page-view[data-page="purchase"] .filters {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .page-view[data-page="purchase"] .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    .page-view[data-page="purchase"] .filters {
+        grid-template-columns: 1fr;
+    }
+    .page-view[data-page="purchase"] .form-grid {
+        grid-template-columns: 1fr;
+    }
+    .page-view[data-page="purchase"] .form-grid .full-width {
+        grid-column: span 1;
+    }
+}
+
+/* MULTI-SELECT FILTER */
+.page-view[data-page="purchase"] .multi-select {
+    position: relative;
+}
+
+.page-view[data-page="purchase"] .multi-select-toggle {
+    width: 100%;
+    height: 36px;
+    border: 1px solid #d0d5dd;
+    border-radius: 5px;
+    padding: 0 11px;
+    background: #fff;
+    color: #374151;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    gap: 8px;
+}
+
+.page-view[data-page="purchase"] .multi-select-toggle i {
+    font-size: 10px;
+    color: #9ca3af;
+}
+
+.page-view[data-page="purchase"] .multi-select-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    max-height: 220px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    box-shadow: 0 8px 20px rgba(16, 24, 40, 0.12);
+    z-index: 50;
+    padding: 6px;
+}
+
+.page-view[data-page="purchase"] .multi-select-menu.show {
+    display: block;
+}
+
+.page-view[data-page="purchase"] .multi-select-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #374151;
+    cursor: pointer;
+}
+
+.page-view[data-page="purchase"] .multi-select-option:hover {
+    background: #f3f6fb;
+}
+
+.page-view[data-page="purchase"] .multi-select-option input {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--ps-primary);
+    cursor: pointer;
+}
+
+.page-view[data-page="purchase"] .multi-select-option.all-option {
+    border-bottom: 1px solid #eef0f4;
+    margin-bottom: 4px;
+    font-weight: 600;
+}

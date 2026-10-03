@@ -1,0 +1,894 @@
+/* =========================================================
+   InventorySystem2 — Daily Stocks page
+   Themed to match the Sale page (sale.css)
+   Scoped under #is2-dailystocks so nothing leaks
+   ========================================================= */
+
+#is2-dailystocks {
+    /* Mirror Sale page tokens */
+    --ds-primary: #1267d9;
+    --ds-primary-dark: #0d4fa8;
+    --ds-text-dark: #16213d;
+    --ds-text: #344054;
+    --ds-text-light: #667085;
+    --ds-border: #e4e7ec;
+    --ds-background: #f6f8fc;
+    --ds-green: #0b9b72;
+    --ds-shadow: 0 2px 8px rgba(16, 24, 40, 0.05);
+
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px 20px 30px;
+    background: var(--ds-background);
+    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    color: var(--ds-text-dark);
+}
+
+#is2-dailystocks *,
+#is2-dailystocks *::before,
+#is2-dailystocks *::after {
+    box-sizing: border-box;
+}
+
+#is2-dailystocks button,
+#is2-dailystocks input,
+#is2-dailystocks select,
+#is2-dailystocks textarea {
+    font-family: inherit;
+}
+
+/* ============ PAGE HEADER ============ */
+#is2-dailystocks .ds-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+    min-height: 82px;
+    margin: -20px -20px 0;
+    padding: 14px 24px;
+    background: #ffffff;
+    border-bottom: 1px solid var(--ds-border);
+}
+
+#is2-dailystocks .ds-head h1 {
+    font-size: 23px;
+    font-weight: 700;
+    color: #14213d;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 0;
+}
+
+#is2-dailystocks .ds-head h1 i {
+    width: 48px;
+    height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    color: var(--ds-green);
+    background: linear-gradient(135deg, #dcf8ee, #c5f0e0);
+    font-size: 21px;
+}
+
+#is2-dailystocks .ds-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* ============ FILTER CARD ============ */
+#is2-dailystocks .ds-filter-panel {
+    background: #fff;
+    border: 1px solid var(--ds-border);
+    border-radius: 8px;
+    box-shadow: var(--ds-shadow);
+    padding: 14px 18px;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr) auto;
+    gap: 14px;
+    align-items: end;
+}
+
+#is2-dailystocks .ds-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+#is2-dailystocks .ds-field label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ds-text);
+}
+
+#is2-dailystocks .ds-field input,
+#is2-dailystocks .ds-field select,
+#is2-dailystocks .multi-select-toggle {
+    height: 36px;
+    padding: 0 11px;
+    border: 1px solid #d0d5dd;
+    border-radius: 5px;
+    background: #fff;
+    color: #374151;
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+    width: 100%;
+}
+
+#is2-dailystocks .ds-field input:focus,
+#is2-dailystocks .ds-field select:focus,
+#is2-dailystocks .multi-select-toggle:focus {
+    border-color: var(--ds-primary);
+    box-shadow: 0 0 0 2px rgba(18, 103, 217, .12);
+}
+
+/* ============ MULTI-SELECT DROPDOWNS ============ */
+#is2-dailystocks .multi-select {
+    position: relative;
+}
+
+#is2-dailystocks .multi-select-toggle {
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    color: var(--ds-text);
+}
+
+#is2-dailystocks .multi-select-toggle::after {
+    content: "\25BE";
+    font-size: 12px;
+    color: #667085;
+    margin-left: 6px;
+}
+
+#is2-dailystocks .multi-select-toggle:hover {
+    border-color: #b8c0cc;
+}
+
+#is2-dailystocks .multi-select-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 100%;
+    min-width: 220px;
+    max-height: 280px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    box-shadow: 0 16px 32px rgba(15, 23, 42, 0.14);
+    z-index: 50;
+    padding: 6px;
+}
+
+#is2-dailystocks .multi-options-list {
+    display: grid;
+    gap: 2px;
+}
+
+#is2-dailystocks .multi-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 9px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--ds-text);
+    font-size: 12px;
+}
+
+#is2-dailystocks .multi-option:hover {
+    background: #f1f5f9;
+}
+
+#is2-dailystocks .multi-option input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--ds-primary);
+    cursor: pointer;
+}
+
+#is2-dailystocks .select-all-option {
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 6px;
+    padding-bottom: 8px;
+    font-weight: 600;
+}
+
+#is2-dailystocks .multi-actions-row {
+    border-top: 1px solid #e2e8f0;
+    margin-top: 6px;
+    padding-top: 8px;
+}
+
+#is2-dailystocks .add-inline-btn {
+    width: 100%;
+    border: 1px dashed #b6c4d5;
+    background: #f8fafc;
+    color: var(--ds-primary);
+    font-weight: 600;
+    padding: 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background .18s;
+}
+
+#is2-dailystocks .add-inline-btn:hover {
+    background: #eef4fb;
+}
+
+#is2-dailystocks .multi-empty {
+    padding: 8px;
+    color: #6b7280;
+    font-size: 12px;
+}
+
+#is2-dailystocks .visually-hidden-select {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    border: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    clip-path: inset(50%);
+}
+
+#is2-dailystocks .modal-multi-select {
+    min-width: 0;
+}
+
+/* ============ BUTTONS (match Sale .btn) ============ */
+#is2-dailystocks .ds-btn {
+    height: 34px;
+    padding: 0 13px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.18s ease;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: inherit;
+}
+
+#is2-dailystocks .ds-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--ds-shadow);
+}
+
+#is2-dailystocks .ds-btn-primary {
+    background: var(--ds-primary);
+    border-color: var(--ds-primary);
+    color: #fff;
+}
+
+#is2-dailystocks .ds-btn-primary:hover {
+    background: var(--ds-primary-dark);
+    border-color: var(--ds-primary-dark);
+}
+
+#is2-dailystocks .ds-btn-success {
+    background: var(--ds-green);
+    border-color: var(--ds-green);
+    color: #fff;
+}
+
+#is2-dailystocks .ds-btn-ghost {
+    color: #087b5e;
+    background: #e9f8f2;
+    border-color: #c8eee1;
+}
+
+#is2-dailystocks .ds-btn-ghost:hover {
+    background: #dcf3ea;
+}
+
+#is2-dailystocks .ds-btn-export {
+    background: var(--ds-green);
+    border-color: var(--ds-green);
+    color: #fff;
+}
+
+#is2-dailystocks .ds-btn-export:hover {
+    background: #0a8a63;
+    border-color: #0a8a63;
+}
+
+#is2-dailystocks .ds-btn-secondary {
+    background: #fff;
+    color: var(--ds-text);
+    border-color: #d0d5dd;
+}
+
+#is2-dailystocks .ds-btn-secondary:hover {
+    background: #f8fafc;
+}
+
+/* ============ READ-ONLY BADGE ============ */
+#is2-dailystocks .ds-badge {
+    display: inline-block;
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffe69c;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 12px;
+}
+
+/* ============ SECTION HEADER ============ */
+#is2-dailystocks .ds-section-header {
+    background: #fff;
+    border: 1px solid var(--ds-border);
+    border-radius: 8px;
+    box-shadow: var(--ds-shadow);
+    padding: 12px 14px;
+    min-height: 43px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+#is2-dailystocks .ds-section-header h2 {
+    color: #17233f;
+    font-size: 14px;
+    font-weight: 700;
+    margin: 0;
+}
+
+#is2-dailystocks .ds-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+#is2-dailystocks .ds-toolbar input[type="text"] {
+    height: 34px;
+    padding: 0 11px;
+    border: 1px solid #d0d5dd;
+    border-radius: 5px;
+    background: #fff;
+    color: #374151;
+    font-size: 12px;
+    min-width: 240px;
+    font-family: inherit;
+    outline: none;
+}
+
+#is2-dailystocks .ds-toolbar input[type="text"]:focus {
+    border-color: var(--ds-primary);
+    box-shadow: 0 0 0 2px rgba(18, 103, 217, .12);
+}
+
+/* ============ TABLE ============ */
+#is2-dailystocks .ds-table-wrap {
+    background: #fff;
+    border: 1px solid var(--ds-border);
+    border-radius: 8px;
+    box-shadow: var(--ds-shadow);
+    overflow-x: auto;
+    width: 100%;
+}
+
+#is2-dailystocks table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1200px;
+}
+
+#is2-dailystocks thead {
+    background: #123d70;
+}
+
+#is2-dailystocks th {
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0;
+    color: #ffffff;
+    white-space: nowrap;
+    border-right: 1px solid rgba(255, 255, 255, 0.15);
+    height: 36px;
+    font-weight: 600;
+}
+
+#is2-dailystocks th:first-child {
+    border-top-left-radius: 8px;
+}
+
+#is2-dailystocks th:last-child {
+    border-top-right-radius: 8px;
+    border-right: none;
+}
+
+#is2-dailystocks td {
+    padding: 10px 12px;
+    border-top: 1px solid #edf0f4;
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--ds-text);
+    text-align: center;
+}
+
+#is2-dailystocks td:nth-child(2) {
+    text-align: left;
+}
+
+#is2-dailystocks tbody tr:hover {
+    background: #f8fbff;
+}
+
+#is2-dailystocks .empty-row {
+    text-align: center;
+    color: #6b7280;
+}
+
+#is2-dailystocks .actions-cell {
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+#is2-dailystocks .table-input {
+    width: 100%;
+    padding: 7px;
+    font-size: 13px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-family: inherit;
+    outline: none;
+}
+
+#is2-dailystocks .table-input:focus {
+    border-color: var(--ds-primary);
+    box-shadow: 0 0 0 2px rgba(18, 103, 217, .12);
+}
+
+/* ============ ACTION BUTTONS (match Sale .action-buttons) ============ */
+#is2-dailystocks .save-btn,
+#is2-dailystocks .cancel-btn,
+#is2-dailystocks .edit-btn,
+#is2-dailystocks .delete-btn {
+    min-width: 62px;
+    height: 29px;
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all .18s;
+    background: #fff;
+    color: #6b7280;
+}
+
+#is2-dailystocks .save-btn {
+    background: #e9f8f2;
+    color: #087b5e;
+    border-color: #c8eee1;
+}
+
+#is2-dailystocks .save-btn:hover {
+    background: #dcf3ea;
+}
+
+#is2-dailystocks .cancel-btn,
+#is2-dailystocks .secondary-btn {
+    background: #eef2f6;
+    color: #445267;
+    border-color: #d6dde5;
+}
+
+#is2-dailystocks .cancel-btn:hover,
+#is2-dailystocks .secondary-btn:hover {
+    background: #e1e8ef;
+}
+
+#is2-dailystocks .edit-btn {
+    background: #e8f1ff;
+    color: #1769d2;
+    border-color: #cfe2ff;
+}
+
+#is2-dailystocks .edit-btn:hover {
+    background: #d9e8ff;
+}
+
+#is2-dailystocks .delete-btn {
+    background: #ffe5e5;
+    color: #d93035;
+    border-color: #ffd2d2;
+}
+
+#is2-dailystocks .delete-btn:hover {
+    background: #ffdede;
+}
+
+#is2-dailystocks .readonly-text {
+    color: #6c757d;
+    font-size: 12px;
+}
+
+/* ============ CHART / SUMMARY CARD ============ */
+#is2-dailystocks .ds-chart-panel {
+    background: #fff;
+    border: 1px solid var(--ds-border);
+    border-radius: 8px;
+    box-shadow: var(--ds-shadow);
+    padding: 14px 18px;
+}
+
+#is2-dailystocks .summary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #edf0f4;
+}
+
+#is2-dailystocks .ds-chart-panel h2 {
+    margin-top: 0;
+    margin-bottom: 4px;
+    font-size: 15px;
+    color: #17233f;
+}
+
+#is2-dailystocks .ds-chart-panel h2 span {
+    color: #667085;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+#is2-dailystocks .summary-header p {
+    margin: 0;
+    color: #667085;
+    font-size: 12px;
+}
+
+#is2-dailystocks .summary-total {
+    color: #667085;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+#is2-dailystocks .summary-total strong {
+    display: block;
+    margin-top: 3px;
+    color: #17233f;
+    font-size: 22px;
+}
+
+#is2-dailystocks .chart-content {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    flex-wrap: wrap;
+    padding: 16px 10px 4px;
+}
+
+#is2-dailystocks .donut-wrap {
+    width: 210px;
+    display: flex;
+    justify-content: center;
+}
+
+#is2-dailystocks .donut-chart {
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    position: relative;
+    background: conic-gradient(#e5e7eb 0deg 360deg);
+}
+
+#is2-dailystocks .donut-chart::after {
+    content: "";
+    position: absolute;
+    inset: 34px;
+    background: #fff;
+    border-radius: 50%;
+}
+
+#is2-dailystocks .donut-legend {
+    flex: 1;
+    min-width: 400px;
+    display: grid;
+    gap: 10px;
+}
+
+#is2-dailystocks .legend-item {
+    display: grid;
+    grid-template-columns: 16px 155px minmax(90px, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    min-height: 34px;
+    padding: 5px 0;
+}
+
+#is2-dailystocks .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+#is2-dailystocks .stock-dot  { background: #16a34a; }
+#is2-dailystocks .required-dot { background: #ea580c; }
+#is2-dailystocks .cabin-dot   { background: #2563eb; }
+
+#is2-dailystocks .legend-label {
+    font-size: 12px;
+    color: var(--ds-text);
+}
+
+#is2-dailystocks .legend-item strong {
+    min-width: 70px;
+    text-align: right;
+    font-size: 12px;
+    color: var(--ds-text);
+}
+
+#is2-dailystocks .legend-track {
+    height: 8px;
+    overflow: hidden;
+    border-radius: 20px;
+    background: #f0f2f5;
+}
+
+#is2-dailystocks .legend-bar {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    transition: width 180ms ease;
+}
+
+#is2-dailystocks .stock-bar    { background: #16a34a; }
+#is2-dailystocks .required-bar { background: #ea580c; }
+#is2-dailystocks .cabin-bar    { background: #2563eb; }
+
+/* ============ MODAL ============ */
+#is2-dailystocks .ds-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 20px;
+}
+
+#is2-dailystocks .ds-modal-card {
+    width: 650px;
+    max-width: 100%;
+    max-height: calc(100vh - 40px);
+    overflow: hidden;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .2);
+    display: flex;
+    flex-direction: column;
+}
+
+#is2-dailystocks .modal-header {
+    padding: 20px 22px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid #edf0f5;
+}
+
+#is2-dailystocks .modal-header h2 {
+    font-size: 19px;
+    margin: 0;
+    color: #17233f;
+}
+
+#is2-dailystocks .modal-header p {
+    margin: 4px 0 0;
+    color: #9ca3af;
+    font-size: 11px;
+}
+
+#is2-dailystocks .modal-close {
+    border: none;
+    background: transparent;
+    font-size: 19px;
+    color: #9ca3af;
+    cursor: pointer;
+    line-height: 1;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background .18s;
+}
+
+#is2-dailystocks .modal-close:hover {
+    background: #f1f5f9;
+}
+
+#is2-dailystocks .modal-form {
+    padding: 22px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    overflow-y: auto;
+}
+
+#is2-dailystocks .add-form select,
+#is2-dailystocks .add-form input {
+    width: 100%;
+    padding: 0 11px;
+    height: 36px;
+    border: 1px solid #d0d5dd;
+    border-radius: 5px;
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+    background: #fff;
+    color: #374151;
+}
+
+#is2-dailystocks .add-form select:focus,
+#is2-dailystocks .add-form input:focus {
+    border-color: var(--ds-primary);
+    box-shadow: 0 0 0 2px rgba(18, 103, 217, .12);
+}
+
+#is2-dailystocks .record-date-note {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: #475467;
+    font-size: 12px;
+}
+
+/* ---- modal actions ---- */
+#is2-dailystocks .modal-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    padding-top: 14px;
+    margin-top: 6px;
+    border-top: 1px solid #edf0f5;
+}
+
+#is2-dailystocks .modal-actions .ds-btn {
+    min-width: 118px;
+    height: 38px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* Ghost variant (soft green) — used for Cancel */
+#is2-dailystocks .ds-btn-ghost {
+    background: #e9f8f2;
+    color: #087b5e;
+    border: 1px solid #c8eee1;
+}
+
+#is2-dailystocks .ds-btn-ghost:hover {
+    background: #dcf3ea;
+    border-color: #b6e5d4;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(16, 24, 40, 0.05);
+}
+
+#is2-dailystocks .ds-btn-ghost:active {
+    transform: translateY(0);
+    background: #cdeee0;
+}
+
+/* Primary variant — used for Save */
+#is2-dailystocks .ds-btn-primary {
+    background: #1267d9;
+    border: 1px solid #1267d9;
+    color: #fff;
+}
+
+#is2-dailystocks .ds-btn-primary:hover {
+    background: #0d4fa8;
+    border-color: #0d4fa8;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(16, 24, 40, 0.05);
+}
+
+#is2-dailystocks .ds-btn-primary:active {
+    transform: translateY(0);
+    background: #0a3f8a;
+}
+
+/* Icons inside modal buttons */
+#is2-dailystocks .modal-actions .ds-btn i {
+    font-size: 12px;
+}
+
+/* ============ RESPONSIVE ============ */
+@media (max-width: 1200px) {
+    #is2-dailystocks .ds-filter-panel {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 900px) {
+    #is2-dailystocks .ds-filter-panel {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    #is2-dailystocks .modal-form {
+        grid-template-columns: 1fr;
+    }
+
+    #is2-dailystocks .chart-content {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #is2-dailystocks .donut-wrap {
+        width: 100%;
+    }
+
+    #is2-dailystocks .summary-header {
+        flex-direction: column;
+    }
+
+    #is2-dailystocks .donut-legend {
+        min-width: 0;
+    }
+
+    #is2-dailystocks .legend-item {
+        grid-template-columns: 16px minmax(105px, 1fr) 1fr auto;
+    }
+}
+
+@media (max-width: 640px) {
+    #is2-dailystocks {
+        padding: 12px 12px 24px;
+    }
+
+    #is2-dailystocks .ds-head {
+        margin: -12px -12px 0;
+        padding: 14px 16px;
+    }
+
+    #is2-dailystocks .ds-head h1 {
+        font-size: 19px;
+    }
+
+    #is2-dailystocks .ds-filter-panel {
+        grid-template-columns: 1fr;
+    }
+
+    #is2-dailystocks .ds-toolbar input[type="text"] {
+        min-width: 160px;
+    }
+}

@@ -1,0 +1,104 @@
+<div class="page-view attendance-page" data-page="attendance" style="display:none;">
+    <header class="page-header att-header">
+        <div><h1><i class="fa-solid fa-calendar-check"></i>
+            Attendance &amp; Payment</h1><p>Manage employee attendance, working hours and payments</p></div>
+        <div class="header-actions">
+            <select class="location-selector" aria-label="Select location">
+                <option value="">All Locations</option>
+                <option>Arneel industries karodi</option>
+                <option>Anil industries karodi</option>
+                <option>Anil industries ghanegoan</option>
+                <option>Anil industries yavatmal</option>
+                <option>Kpr projections</option>
+            </select>
+            <select class="month-selector" aria-label="Select month">
+                <option value="01">January</option><option value="02">February</option><option value="03">March</option>
+                <option value="04">April</option><option value="05">May</option><option value="06">June</option>
+                <option value="07">July</option><option value="08">August</option><option value="09" selected>September</option>
+                <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+            </select>
+            <select class="year-selector" aria-label="Select year"><option value="2025">2025</option><option value="2026" selected>2026</option><option value="2027">2027</option></select>
+            <button class="btn btn-outline" id="export-button">↓ Export</button>
+            <button class="btn btn-outline" id="import-button">↑ Import</button>
+            <button class="btn btn-primary" id="add-employee-button">+ Add New Employee</button>
+            <input id="import-file" type="file" accept=".xlsx,.xls,.json,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/json,text/csv" hidden>
+        </div>
+    </header>
+
+    <section class="summary-grid">
+        <div class="summary-card"><div class="summary-icon employee-icon">👥</div><div><span>Employees</span><strong>0</strong></div></div>
+        <div class="summary-card"><div class="summary-icon present-icon">✓</div><div><span>Present</span><strong>0</strong></div></div>
+        <div class="summary-card"><div class="summary-icon days-icon">📅</div><div><span>Working Days</span><strong>0</strong></div></div>
+        <div class="summary-card"><div class="summary-icon payable-icon">₹</div><div><span>Total Payable</span><strong>₹0</strong></div></div>
+        <div class="summary-card"><div class="summary-icon paid-icon">✓</div><div><span>Paid</span><strong>₹0</strong></div></div>
+        <div class="summary-card due-card"><div class="summary-icon due-icon">!</div><div><span>Due</span><strong>₹0</strong></div></div>
+    </section>
+
+    <section class="filter-section">
+        <div class="search-box"><span>🔍</span><input type="text" placeholder="Search employee..."></div>
+        <select class="filter-select"><option>All Departments</option><option>Production</option><option>Accounts</option><option>HR</option><option>Sales</option></select>
+        <select class="filter-select"><option>All Payment Status</option><option>Paid</option><option>Partially Paid</option><option>Pending</option></select>
+    </section>
+
+    <section class="attendance-section">
+        <div class="table-header">
+            <div><h2>Monthly Attendance</h2><p>Click an employee to view daily details</p></div>
+            <div class="legend"><span><i class="legend-dot present"></i> Present</span><span><i class="legend-dot absent"></i> Absent</span><span><i class="legend-dot holiday"></i> Holiday</span></div>
+        </div>
+        <div class="table-wrapper">
+            <table class="attendance-table">
+                <thead><tr><th class="employee-column">Employee</th><th class="monthly-hours">Monthly Hours</th><th class="working-days">Working Days</th><th class="total">Total</th><th class="paid">Paid</th><th class="due">Due</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div class="attendance-pagination">
+            <button class="btn btn-outline" id="previous-days" type="button">← Previous</button><span id="day-page-label">Days 1-10</span><button class="btn btn-outline" id="next-days" type="button">Next →</button>
+        </div>
+        <div class="employee-pagination">
+            <button class="btn btn-outline" id="previous-employees" type="button">← Previous Employees</button><span id="employee-page-label">Employees 1-10</span><button class="btn btn-outline" id="next-employees" type="button">Next Employees →</button>
+        </div>
+    </section>
+
+    <div class="employee-details modal-overlay" role="dialog" aria-modal="true" aria-labelledby="employee-details-title" hidden>
+        <div class="employee-details-dialog">
+            <button class="modal-close" type="button" aria-label="Close employee details">×</button>
+            <div class="details-header">
+                <div class="selected-employee"><div class="large-avatar">--</div><div><h2 id="employee-details-title">Employee</h2><p>Department • Employee ID: --</p></div></div>
+                <div class="employee-summary">
+                    <div><span>Monthly Hours</span><strong>0 hrs</strong></div><div><span>Working Days</span><strong>0</strong></div>
+                    <div><span>Total Payable</span><strong>₹0</strong></div><div><span>Due</span><strong class="text-danger">₹0</strong></div>
+                    <div class="paid-entry"><label for="paid-amount">Paid Amount</label><input id="paid-amount" class="paid-input" type="number" min="0" step="0.01" value="0"></div>
+                </div>
+            </div>
+            <div class="daily-records">
+                <div class="daily-header"><h3>Daily Attendance &amp; Payment</h3></div>
+                <div class="daily-table-wrapper"><table class="daily-table">
+                    <thead><tr><th>Day + Date</th><th>Status</th><th>Rate</th><th>In Time</th><th>Out Time</th><th>Total Hours Worked</th><th>Daily Pay</th><th>Remarks</th></tr></thead>
+                    <tbody></tbody>
+                </table></div>
+            </div>
+            <div class="details-actions"><button class="btn btn-outline">⚙ Update</button></div>
+        </div>
+    </div>
+
+    <div class="employee-form-overlay" id="employee-form-overlay" hidden>
+        <form class="employee-form" id="employee-form">
+            <button class="modal-close" id="employee-form-close" type="button" aria-label="Close">×</button>
+            <h2>Add New Employee</h2>
+            <label>Employee Name<input id="new-employee-name" required type="text"></label>
+            <label>Department<input id="new-employee-department" required type="text" value="Production"></label>
+            <label>Location
+                <select id="new-employee-location" required>
+                    <option value="">Select Location</option>
+                    <option>Arneel industries karodi</option>
+                    <option>Anil industries karodi</option>
+                    <option>Anil industries ghanegoan</option>
+                    <option>Anil industries yavatmal</option>
+                    <option>Kpr projections</option>
+                </select>
+            </label>
+            <label>Start Date<input id="new-employee-start-date" required type="date"></label>
+            <div class="employee-form-actions"><button class="btn btn-outline" id="employee-form-cancel" type="button">Cancel</button><button class="btn btn-primary" type="submit">Add Employee</button></div>
+        </form>
+    </div>
+</div>

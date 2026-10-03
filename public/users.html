@@ -1,0 +1,47 @@
+<div class="page-view users-page" data-page="users" style="display:none;">
+    <header class="users-header">
+        <div>
+            <h1>
+            <i class="fa-solid fa-user-shield"></i>
+            Users &amp; Access
+        </h1>
+            <p>Manage user accounts, roles, and account access.</p>
+        </div>
+        <button class="users-primary-btn" id="addUserBtn" type="button"><i class="fa-solid fa-plus"></i> Add New User</button>
+    </header>
+
+    <section class="users-content">
+        <div class="users-table-header">
+            <div><h2>User Management</h2><p id="usersCount">0 users</p></div>
+        </div>
+        <div class="users-table-wrap">
+            <table class="users-table">
+                <thead><tr><th>ID</th><th>Full Name</th><th>Mobile Number</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody id="usersTableBody"></tbody>
+            </table>
+        </div>
+        <p id="usersStatusText" class="users-status-text" aria-live="polite"></p>
+    </section>
+
+    <div id="userModal" class="modal-overlay" style="display:none;">
+        <div class="payment-modal">
+            <div class="modal-header">
+                <div><h2 id="userModalTitle">Add New User</h2><p id="userModalSubtitle">Create a user account with role and status</p></div>
+                <button type="button" class="modal-close" id="closeUserModal">×</button>
+            </div>
+            <form id="userForm">
+                <input type="hidden" id="userId">
+                <div class="form-grid" style="padding:20px;">
+                    <div class="form-group full-width"><label for="userFullName">Full Name</label><input id="userFullName" type="text" placeholder="Enter full name" required></div>
+                    <div class="form-group"><label for="userMobileNumber">Mobile Number</label><input id="userMobileNumber" type="tel" maxlength="10" placeholder="Enter 10-digit mobile" required></div>
+                    <div class="form-group"><label for="userRole">Role</label><select id="userRole" required><option value="Admin">Admin</option><option value="Employee">Employee</option></select></div>
+                    <div class="form-group full-width"><label for="userIsActive">Status</label><select id="userIsActive" required><option value="1">Active</option><option value="0">Inactive</option></select></div>
+                </div>
+                <div class="modal-footer" style="padding:0 20px 20px;">
+                    <button type="button" id="cancelUserBtn" class="modal-cancel">Cancel</button>
+                    <button type="submit" id="saveUserBtn" class="modal-save">Save User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

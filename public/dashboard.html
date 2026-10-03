@@ -1,0 +1,237 @@
+<div class="page-view" data-page="dashboard" style="display:none;">
+  <div id="is2-dashboard" class="is2-app-fragment">
+
+    <!-- Page heading with location selector -->
+    <div class="is2-page-head">
+      <h1><i class="fas fa-gauge-high" style="color:#16a34a;"></i> Dashboard</h1>
+      <select class="is2-firm-select" id="is2DashLocation" aria-label="Select location">
+        <option value="">All Locations</option>
+        <option value="Arneel Industries Karodi">Arneel Industries Karodi</option>
+        <option value="Anil Industries Karodi">Anil Industries Karodi</option>
+        <option value="Anil Industries Ghanegoan">Anil Industries Ghanegoan</option>
+        <option value="Anil Industries Yavatmal">Anil Industries Yavatmal</option>
+        <option value="Kpr Projections">Kpr Projections</option>
+      </select>
+    </div>
+
+    <!-- Stat cards -->
+    <div class="is2-stat-cards">
+      <div class="is2-stat-card">
+        <div class="is2-label">To Collect</div>
+        <div class="is2-value is2-val-green" id="is2DashToCollect"><i class="fas fa-arrow-trend-up"></i> ₹ 3,13,999</div>
+      </div>
+      <div class="is2-stat-card">
+        <div class="is2-label">To Pay</div>
+        <div class="is2-value is2-val-red" id="is2DashToPay"><i class="fas fa-arrow-trend-down"></i> ₹ 2,98,095</div>
+      </div>
+      <div class="is2-stat-card">
+        <div class="is2-label">Cash in Hand</div>
+        <div class="is2-value is2-val-blue" id="is2DashCash"><i class="fas fa-wallet"></i> ₹ 4,84,993</div>
+      </div>
+      <div class="is2-stat-card">
+        <div class="is2-label">Stock Value</div>
+        <div class="is2-value is2-val-orange" id="is2DashStock"><i class="fas fa-boxes-stacked"></i> ₹ 27,000</div>
+      </div>
+    </div>
+
+    <!-- Business Overview + Quick Actions -->
+    <div class="is2-row-2">
+
+      <!-- Business Overview -->
+      <div class="is2-panel">
+        <div class="is2-panel-head">
+          <h3>Business Overview <span class="is2-info" title="Sale vs Purchase trend">ⓘ</span></h3>
+          <div class="is2-chip-row">
+            <span class="is2-chip is2-green" id="is2DashChipSale">Sale ₹ 1,56,05,192</span>
+            <span class="is2-chip is2-red" id="is2DashChipPurchase">Purchase ₹ 2,98,09,095</span>
+            <span class="is2-chip is2-gray" id="is2DashChipExpense">Expense ₹ 200.00</span>
+            <span class="is2-chip is2-blue">30 Days <i class="fas fa-chevron-down"></i></span>
+          </div>
+        </div>
+
+        <!-- chart legend -->
+        <div class="is2-chart-legend">
+          <span><i class="is2-dot" style="background:#22c55e;"></i> Sale</span>
+          <span><i class="is2-dot" style="background:#ef4444;"></i> Purchase</span>
+        </div>
+
+        <div class="is2-chart-area">
+          <div class="is2-chart-grid"></div>
+          <div class="is2-y-labels">
+            <span>8,00,000</span><span>6,00,000</span><span>4,00,000</span>
+            <span>2,00,000</span><span>0</span>
+          </div>
+          <svg class="is2-chart-svg" viewBox="0 0 600 220" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="gGreen" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#22c55e" stop-opacity="0.25"/>
+                <stop offset="100%" stop-color="#22c55e" stop-opacity="0"/>
+              </linearGradient>
+              <linearGradient id="gRed" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#ef4444" stop-opacity="0.2"/>
+                <stop offset="100%" stop-color="#ef4444" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M0,200 L100,198 L200,190 L280,180 L330,60 L370,130 L440,195 L540,200 L600,200 L600,220 L0,220 Z" fill="url(#gGreen)"/>
+            <path d="M0,200 L100,198 L200,190 L280,180 L330,60 L370,130 L440,195 L540,200 L600,200" fill="none" stroke="#22c55e" stroke-width="2"/>
+            <path d="M0,205 L100,203 L200,200 L290,192 L340,120 L380,175 L450,198 L540,203 L600,203 L600,220 L0,220 Z" fill="url(#gRed)"/>
+            <path d="M0,205 L100,203 L200,200 L290,192 L340,120 L380,175 L450,198 L540,203 L600,203" fill="none" stroke="#ef4444" stroke-width="2"/>
+          </svg>
+          <div class="is2-x-labels">
+            <span>26 Jul</span><span>1 Aug</span><span>3 Aug</span><span>5 Aug</span>
+            <span>7 Aug</span><span>9 Aug</span><span>11 Aug</span><span>13 Aug</span>
+            <span>15 Aug</span><span>17 Aug</span><span>19 Aug</span><span>21 Aug</span>
+            <span>23 Aug</span><span>25 Aug</span><span>27 Aug</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Actions with settings gear -->
+<!-- ================= QUICK ACTIONS PANEL ================= -->
+<div class="is2-panel">
+  <div class="is2-panel-head">
+    <h3>Quick Actions</h3>
+    <span class="is2-panel-gear" id="is2QaGear" title="Customize quick actions">
+      <i class="fas fa-gear"></i>
+    </span>
+  </div>
+
+  <!-- Rendered dynamically by dashboard.js -->
+  <div class="is2-qa-grid" id="is2QaGrid"></div>
+</div>
+    </div>
+
+    <!-- Recent Transactions + Low Stock + Top Selling -->
+    <div class="is2-row-2">
+
+      <!-- Recent Transactions -->
+      <div class="is2-panel">
+        <div class="is2-panel-head"><h3>Recent Transactions</h3></div>
+        <div class="is2-table-wrap">
+          <table class="is2-tx">
+            <thead>
+              <tr>
+                <th>Type</th><th>Number</th><th>Party</th>
+                <th>Date</th><th>Amount</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="is2DashRecentBody">
+              <tr><td>Sale</td><td>INV-1007</td><td>Vishu Jadhav</td><td>26/08/2026</td><td class="is2-amt">₹ 500.00</td><td><span class="is2-status is2-paid">Paid</span></td></tr>
+              <tr><td>Purchase</td><td>PBL-401</td><td>V-Cell Purchase</td><td>26/08/2026</td><td class="is2-amt">₹ 500.00</td><td><span class="is2-status is2-unpaid">Unpaid</span></td></tr>
+              <tr><td>Sale</td><td>INV-1006</td><td>Vishu Jadhav</td><td>26/08/2026</td><td class="is2-amt">₹ 1,000.00</td><td><span class="is2-status is2-paid">Paid</span></td></tr>
+              <tr><td>Sale</td><td>INV-1005</td><td>Vishu Jadhav</td><td>26/08/2026</td><td class="is2-amt">₹ 500.00</td><td><span class="is2-status is2-paid">Paid</span></td></tr>
+              <tr><td>Sale</td><td>SO-2</td><td>Vishu Jadhav</td><td>24/08/2026</td><td class="is2-amt">₹ 500.00</td><td><span class="is2-status is2-paid">Paid</span></td></tr>
+              <tr><td>Sale</td><td>SO-1</td><td>Vishu Jadhav</td><td>24/08/2026</td><td class="is2-amt">₹ 500.00</td><td><span class="is2-status is2-paid">Paid</span></td></tr>
+              <tr><td>Sale</td><td>INV-1004</td><td>Puja Bindu Rathod</td><td>24/08/2026</td><td class="is2-amt">₹ 500.00</td><td><span class="is2-status is2-paid">Paid</span></td></tr>
+              <tr><td>Estimate</td><td>QT-001</td><td>Puja Bindu Rathod</td><td>24/08/2026</td><td class="is2-amt">₹ 500.00</td><td><span class="is2-status is2-paid">Paid</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Right column: Low Stock + Top Selling -->
+      <div class="is2-col-stack">
+
+        <!-- Low Stock Alerts -->
+        <div class="is2-panel">
+          <div class="is2-panel-head">
+            <h3>Low Stock Alerts</h3>
+            <span class="is2-view-all">View all</span>
+          </div>
+          <div class="is2-alert-list">
+            <div class="is2-alert-item"><span class="is2-alert-name">Cement</span><span class="is2-tag">14 pcs</span></div>
+            <div class="is2-alert-item"><span class="is2-alert-name">Zed Black 800*2400 Artificial</span><span class="is2-tag">15 pcs</span></div>
+            <div class="is2-alert-item"><span class="is2-alert-name">Weatherpro 50trm Drum (Ultratech)</span><span class="is2-tag">14 pcs</span></div>
+            <div class="is2-alert-item"><span class="is2-alert-name">Zed Black 800*2400 15mm</span><span class="is2-tag">4 pcs</span></div>
+          </div>
+        </div>
+
+        <!-- Top Selling Products -->
+        <div class="is2-panel">
+          <div class="is2-panel-head">
+            <h3>Top Selling Products</h3>
+            <span class="is2-chip is2-blue">This month</span>
+          </div>
+          <div class="is2-sell-list">
+            <div class="is2-sell-item">
+              <div class="is2-sell-info">
+                <div class="is2-sell-icon"><i class="fas fa-layer-group"></i></div>
+                <span>Steel 10mm Polad</span>
+              </div>
+              <span class="is2-amount">₹ 71,749</span>
+            </div>
+            <div class="is2-sell-item">
+              <div class="is2-sell-info">
+                <div class="is2-sell-icon"><i class="fas fa-layer-group"></i></div>
+                <span>Steel 8mm Polad</span>
+              </div>
+              <span class="is2-amount">₹ 48,068</span>
+            </div>
+            <div class="is2-sell-item">
+              <div class="is2-sell-info">
+                <div class="is2-sell-icon"><i class="fas fa-layer-group"></i></div>
+                <span>Steel 12mm Polad</span>
+              </div>
+              <span class="is2-amount">₹ 32,968</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+<!-- ================= CUSTOMIZE QUICK ACTIONS MODAL ================= -->
+<div class="is2-modal-overlay" id="is2QaModal" aria-hidden="true">
+  <div class="is2-modal" role="dialog" aria-modal="true" aria-labelledby="is2QaModalTitle">
+
+    <!-- Header -->
+    <div class="is2-modal-head">
+      <h3 id="is2QaModalTitle">Customize Quick Actions</h3>
+      <button class="is2-modal-close" id="is2QaClose" aria-label="Close">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+
+    <!-- Body -->
+    <div class="is2-modal-body">
+
+      <p class="is2-modal-hint">
+        Pick up to <b>8</b> shortcuts and arrange them. Seven or eight are laid out 4 per row.
+      </p>
+
+      <!-- On your dashboard (active list) -->
+      <div class="is2-modal-section">
+        <h4 class="is2-modal-subhead">
+          On your dashboard <span id="is2QaCount">(0/8)</span>
+        </h4>
+        <ul class="is2-qa-manage-list" id="is2QaActiveList">
+          <!-- items injected by JS -->
+        </ul>
+      </div>
+
+      <!-- Available shortcuts -->
+      <div class="is2-modal-section">
+        <h4 class="is2-modal-subhead">Available shortcuts</h4>
+        <div class="is2-qa-available" id="is2QaAvailable">
+          <!-- chips injected by JS -->
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="is2-modal-foot">
+      <button class="is2-btn is2-btn-ghost" id="is2QaReset">
+        <i class="fas fa-rotate-left"></i> Reset to Default
+      </button>
+      <div class="is2-modal-foot-right">
+        <button class="is2-btn is2-btn-ghost" id="is2QaCancel">Cancel</button>
+        <button class="is2-btn is2-btn-primary" id="is2QaSave">Save</button>
+      </div>
+    </div>
+
+  </div>
+</div>  
+
+</div>
+</div>

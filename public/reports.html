@@ -1,0 +1,820 @@
+<div class="page-view" data-page="reports" style="display:none;">
+  <div id="is2-reports" class="is2-reports-fragment">
+
+    <!-- ================= PAGE HEADER ================= -->
+    <div class="is2-reports-head">
+      <h1>
+        <i class="fas fa-file-lines" style="color:#16a34a;"></i>
+        Reports
+      </h1>
+      <div class="is2-reports-head-actions">
+        <select class="is2-firm-select" id="is2ReportsLocation" aria-label="Select location">
+          <option value="">All Locations</option>
+          <option value="Arneel Industries Karodi">Arneel Industries Karodi</option>
+          <option value="Anil Industries Karodi">Anil Industries Karodi</option>
+          <option value="Anil Industries Ghanegoan">Anil Industries Ghanegoan</option>
+          <option value="Anil Industries Yavatmal">Anil Industries Yavatmal</option>
+          <option value="Kpr Projections">Kpr Projections</option>
+        </select>
+        <button class="is2-reports-btn is2-reports-btn-ghost" id="is2ReportsExport">
+          <i class="fas fa-file-export"></i> Export
+        </button>
+      </div>
+    </div>
+
+    <!-- ================= TABS ================= -->
+    <div class="is2-reports-tabs" role="tablist" aria-label="Report categories">
+      <button class="is2-reports-tab is2-active"
+              role="tab"
+              data-tab="contractor"
+              aria-selected="true">
+        <i class="fas fa-helmet-safety"></i> Contractor
+      </button>
+      <button class="is2-reports-tab"
+              role="tab"
+              data-tab="sale"
+              aria-selected="false">
+        <i class="fas fa-tags"></i> Sale
+      </button>
+      <button class="is2-reports-tab"
+              role="tab"
+              data-tab="purchase"
+              aria-selected="false">
+        <i class="fas fa-cart-shopping"></i> Purchase
+      </button>
+      <button class="is2-reports-tab"
+              role="tab"
+              data-tab="attendance"
+              aria-selected="false">
+        <i class="fas fa-calendar-check"></i> Attendance
+      </button>
+    </div>
+
+    <!-- ================= TAB PANELS ================= -->
+    <div class="is2-reports-panels">
+
+      <!-- ========== CONTRACTOR PANEL ========== -->
+      <section class="is2-reports-panel is2-active"
+               data-panel="contractor"
+               role="tabpanel">
+
+        <div class="is2-reports-panel-head">
+          <h2>Contractor Reports</h2>
+          <p class="is2-reports-panel-hint">Contractor-wise work, payment and outstanding summary.</p>
+        </div>
+
+        <!-- ============ FILTERS ============ -->
+        <div class="is2-cp-filters">
+
+          <div class="is2-cp-filter">
+            <label for="is2CpFromDate">From Date</label>
+            <input type="date" id="is2CpFromDate">
+          </div>
+
+          <div class="is2-cp-filter">
+            <label for="is2CpToDate">To Date</label>
+            <input type="date" id="is2CpToDate">
+          </div>
+
+          <div class="is2-cp-filter is2-cp-filter-search">
+            <label for="is2CpSearch">Search Contractor</label>
+            <div class="is2-cp-search-wrap">
+              <input type="text" id="is2CpSearch" placeholder="Search by contractor name...">
+              <i class="fas fa-search"></i>
+            </div>
+          </div>
+
+          <div class="is2-cp-filter">
+            <label for="is2CpStatus">Payment Status</label>
+            <select id="is2CpStatus">
+              <option value="ALL">All Status</option>
+              <option value="MATCH">Match</option>
+              <option value="PENDING">Pending</option>
+              <option value="MISMATCH">Mismatch</option>
+              <option value="OVERPAID">Overpaid</option>
+            </select>
+          </div>
+
+          <div class="is2-cp-filter">
+            <label for="is2CpWorkType">Work Type</label>
+            <select id="is2CpWorkType">
+              <option value="ALL">All Work Types</option>
+              <option value="Fabrication">Fabrication</option>
+              <option value="Cement Sheet">Cement Sheet</option>
+              <option value="Electrical">Electrical</option>
+              <option value="Tiles">Tiles</option>
+              <option value="Plumbing">Plumbing</option>
+              <option value="Door Fitting">Door Fitting</option>
+              <option value="Outer Colour">Outer Colour</option>
+              <option value="Inner Colour">Inner Colour</option>
+            </select>
+          </div>
+
+          <div class="is2-cp-filter-actions">
+            <button type="button" class="is2-cp-btn is2-cp-btn-primary" id="is2CpApply">
+              <i class="fas fa-filter"></i> Apply
+            </button>
+            <button type="button" class="is2-cp-btn is2-cp-btn-ghost" id="is2CpReset">
+              <i class="fas fa-rotate-left"></i> Reset
+            </button>
+          </div>
+
+        </div>
+
+        <!-- ============ KPI CARDS ============ -->
+        <div class="is2-cp-kpis">
+
+          <article class="is2-cp-kpi is2-cp-kpi-blue">
+            <div class="is2-cp-kpi-icon"><i class="fas fa-helmet-safety"></i></div>
+            <div class="is2-cp-kpi-body">
+              <span class="is2-cp-kpi-label">TOTAL CONTRACTORS</span>
+              <strong class="is2-cp-kpi-value" id="is2CpTotalContractors">0</strong>
+              <small>Active Contractors</small>
+            </div>
+          </article>
+
+          <article class="is2-cp-kpi is2-cp-kpi-green">
+            <div class="is2-cp-kpi-icon"><i class="fas fa-indian-rupee-sign"></i></div>
+            <div class="is2-cp-kpi-body">
+              <span class="is2-cp-kpi-label">TOTAL AMOUNT</span>
+              <strong class="is2-cp-kpi-value" id="is2CpTotalAmount">₹0</strong>
+              <small>Total Contract Amount</small>
+            </div>
+          </article>
+
+          <article class="is2-cp-kpi is2-cp-kpi-purple">
+            <div class="is2-cp-kpi-icon"><i class="fas fa-receipt"></i></div>
+            <div class="is2-cp-kpi-body">
+              <span class="is2-cp-kpi-label">TOTAL PAYMENT</span>
+              <strong class="is2-cp-kpi-value" id="is2CpTotalPayment">₹0</strong>
+              <small>Total Amount Paid</small>
+            </div>
+          </article>
+
+          <article class="is2-cp-kpi is2-cp-kpi-orange">
+            <div class="is2-cp-kpi-icon"><i class="fas fa-hourglass-half"></i></div>
+            <div class="is2-cp-kpi-body">
+              <span class="is2-cp-kpi-label">BALANCE PAYABLE</span>
+              <strong class="is2-cp-kpi-value" id="is2CpTotalBalance">₹0</strong>
+              <small>Total Outstanding</small>
+            </div>
+          </article>
+
+        </div>
+
+        <!-- ============ WORK SUMMARY ============ -->
+        <div class="is2-cp-summary">
+
+          <div class="is2-cp-summary-head">
+            <h3>
+              WORK SUMMARY
+              <span class="is2-cp-summary-sub">(Total Quantity)</span>
+            </h3>
+            <div class="is2-cp-summary-total">
+              Total Quantity: <strong id="is2CpTotalQuantity">0</strong>
+            </div>
+          </div>
+
+          <div class="is2-cp-summary-grid">
+
+            <!-- LEFT COLUMN -->
+            <div class="is2-cp-summary-col">
+
+              <div class="is2-cp-work-row" data-work="fabrication">
+                <div class="is2-cp-work-name">
+                  <i class="fas fa-cube" style="color:#4285f4;"></i>
+                  <span>Fabrication</span>
+                </div>
+                <div class="is2-cp-progress">
+                  <div class="is2-cp-progress-bar" data-bar="fabrication" style="width:0%;background:#4285f4;"></div>
+                </div>
+                <strong class="is2-cp-work-value" data-val="fabrication">0</strong>
+              </div>
+
+              <div class="is2-cp-work-row" data-work="cement_sheet">
+                <div class="is2-cp-work-name">
+                  <i class="fas fa-layer-group" style="color:#0d9c7a;"></i>
+                  <span>Cement Sheet</span>
+                </div>
+                <div class="is2-cp-progress">
+                  <div class="is2-cp-progress-bar" data-bar="cement_sheet" style="width:0%;background:#0d9c7a;"></div>
+                </div>
+                <strong class="is2-cp-work-value" data-val="cement_sheet">0</strong>
+              </div>
+
+              <div class="is2-cp-work-row" data-work="electrical">
+                <div class="is2-cp-work-name">
+                  <i class="fas fa-bolt" style="color:#f5a900;"></i>
+                  <span>Electrical</span>
+                </div>
+                <div class="is2-cp-progress">
+                  <div class="is2-cp-progress-bar" data-bar="electrical" style="width:0%;background:#f5a900;"></div>
+                </div>
+                <strong class="is2-cp-work-value" data-val="electrical">0</strong>
+              </div>
+
+              <div class="is2-cp-work-row" data-work="tiles">
+                <div class="is2-cp-work-name">
+                  <i class="fas fa-th" style="color:#7b4ce5;"></i>
+                  <span>Tiles</span>
+                </div>
+                <div class="is2-cp-progress">
+                  <div class="is2-cp-progress-bar" data-bar="tiles" style="width:0%;background:#7b4ce5;"></div>
+                </div>
+                <strong class="is2-cp-work-value" data-val="tiles">0</strong>
+              </div>
+
+            </div>
+
+            <!-- RIGHT COLUMN -->
+            <div class="is2-cp-summary-col">
+
+              <div class="is2-cp-work-row" data-work="plumbing">
+                <div class="is2-cp-work-name">
+                  <i class="fas fa-wrench" style="color:#e95191;"></i>
+                  <span>Plumbing</span>
+                </div>
+                <div class="is2-cp-progress">
+                  <div class="is2-cp-progress-bar" data-bar="plumbing" style="width:0%;background:#e95191;"></div>
+                </div>
+                <strong class="is2-cp-work-value" data-val="plumbing">0</strong>
+              </div>
+
+              <div class="is2-cp-work-row" data-work="door_fitting">
+                <div class="is2-cp-work-name">
+                  <i class="fas fa-door-closed" style="color:#ef7d22;"></i>
+                  <span>Door Fitting</span>
+                </div>
+                <div class="is2-cp-progress">
+                  <div class="is2-cp-progress-bar" data-bar="door_fitting" style="width:0%;background:#ef7d22;"></div>
+                </div>
+                <strong class="is2-cp-work-value" data-val="door_fitting">0</strong>
+              </div>
+
+              <div class="is2-cp-work-row" data-work="outer_colour">
+                <div class="is2-cp-work-name">
+                  <i class="fas fa-paint-roller" style="color:#17a5b4;"></i>
+                  <span>Outer Colour</span>
+                </div>
+                <div class="is2-cp-progress">
+                  <div class="is2-cp-progress-bar" data-bar="outer_colour" style="width:0%;background:#17a5b4;"></div>
+                </div>
+                <strong class="is2-cp-work-value" data-val="outer_colour">0</strong>
+              </div>
+
+              <div class="is2-cp-work-row" data-work="inner_colour">
+                <div class="is2-cp-work-name">
+                  <i class="fas fa-brush" style="color:#38a91b;"></i>
+                  <span>Inner Colour</span>
+                </div>
+                <div class="is2-cp-progress">
+                  <div class="is2-cp-progress-bar" data-bar="inner_colour" style="width:0%;background:#38a91b;"></div>
+                </div>
+                <strong class="is2-cp-work-value" data-val="inner_colour">0</strong>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ========== SALE PANEL ========== -->
+      <section class="is2-reports-panel"
+               data-panel="sale"
+               role="tabpanel">
+
+        <div class="is2-reports-panel-head">
+          <h2>Sale Reports</h2>
+          <p class="is2-reports-panel-hint">Sale summaries, party-wise and item-wise breakdown.</p>
+        </div>
+
+        <!-- ============ FILTERS ============ -->
+        <div class="is2-cp-filters">
+
+          <div class="is2-cp-filter">
+            <label for="is2SaleFromDate">From Date</label>
+            <input type="date" id="is2SaleFromDate">
+          </div>
+
+          <div class="is2-cp-filter">
+            <label for="is2SaleToDate">To Date</label>
+            <input type="date" id="is2SaleToDate">
+          </div>
+
+          <div class="is2-cp-filter is2-cp-filter-search">
+            <label for="is2SaleSearch">Search Party / Item</label>
+            <div class="is2-cp-search-wrap">
+              <input type="text" id="is2SaleSearch" placeholder="Party or item name...">
+              <i class="fas fa-search"></i>
+            </div>
+          </div>
+
+          <div class="is2-cp-filter">
+            <label for="is2SaleStatus">Payment Status</label>
+            <select id="is2SaleStatus">
+              <option value="ALL">All Status</option>
+              <option value="PAID">Paid</option>
+              <option value="PENDING">Pending</option>
+              <option value="PARTIAL">Partial</option>
+            </select>
+          </div>
+
+          <div class="is2-cp-filter">
+            <label for="is2SaleCategory">Category</label>
+            <select id="is2SaleCategory">
+              <option value="ALL">All Categories</option>
+              <option value="Cement">Cement</option>
+              <option value="Steel">Steel</option>
+              <option value="Paint">Paint</option>
+              <option value="Tiles">Tiles</option>
+              <option value="Electrical">Electrical</option>
+            </select>
+          </div>
+
+          <div class="is2-cp-filter-actions">
+            <button type="button" class="is2-cp-btn is2-cp-btn-primary" id="is2SaleApply">
+              <i class="fas fa-filter"></i> Apply
+            </button>
+            <button type="button" class="is2-cp-btn is2-cp-btn-ghost" id="is2SaleReset">
+              <i class="fas fa-rotate-left"></i> Reset
+            </button>
+          </div>
+
+        </div>
+
+        <!-- ============ KPI CARDS ============ -->
+        <div class="is2-cp-kpis">
+
+          <article class="is2-cp-kpi is2-cp-kpi-blue">
+            <div class="is2-cp-kpi-icon"><i class="fas fa-tags"></i></div>
+            <div class="is2-cp-kpi-body">
+              <span class="is2-cp-kpi-label">TOTAL INVOICES</span>
+              <strong class="is2-cp-kpi-value" id="is2SaleTotalInvoices">0</strong>
+              <small>Number of sale invoices</small>
+            </div>
+          </article>
+
+          <article class="is2-cp-kpi is2-cp-kpi-green">
+            <div class="is2-cp-kpi-icon"><i class="fas fa-indian-rupee-sign"></i></div>
+            <div class="is2-cp-kpi-body">
+              <span class="is2-cp-kpi-label">TOTAL SALE VALUE</span>
+              <strong class="is2-cp-kpi-value" id="is2SaleTotalValue">₹0</strong>
+              <small>Gross sale amount</small>
+            </div>
+          </article>
+
+          <article class="is2-cp-kpi is2-cp-kpi-purple">
+            <div class="is2-cp-kpi-icon"><i class="fas fa-receipt"></i></div>
+            <div class="is2-cp-kpi-body">
+              <span class="is2-cp-kpi-label">RECEIVED AMOUNT</span>
+              <strong class="is2-cp-kpi-value" id="is2SaleReceivedAmount">₹0</strong>
+              <small>Amount collected</small>
+            </div>
+          </article>
+
+          <article class="is2-cp-kpi is2-cp-kpi-orange">
+            <div class="is2-cp-kpi-icon"><i class="fas fa-hourglass-half"></i></div>
+            <div class="is2-cp-kpi-body">
+              <span class="is2-cp-kpi-label">OUTSTANDING</span>
+              <strong class="is2-cp-kpi-value" id="is2SaleOutstanding">₹0</strong>
+              <small>Balance receivable</small>
+            </div>
+          </article>
+
+        </div>
+
+        <!-- ============ TOP ITEMS SUMMARY ============ -->
+        <div class="is2-cp-summary">
+
+          <div class="is2-cp-summary-head">
+            <h3>
+              TOP ITEMS
+              <span class="is2-cp-summary-sub">(by quantity)</span>
+            </h3>
+            <div class="is2-cp-summary-total">
+              Total Items: <strong id="is2SaleTotalItems">0</strong>
+            </div>
+          </div>
+
+          <div class="is2-cp-summary-grid is2-single-col">
+
+            <div class="is2-cp-summary-col">
+
+              <div class="is2-cp-work-row" data-work="cement">
+                <div class="is2-cp-work-name">
+                  <i class="fas fa-cube" style="color:#4285f4;"></i>
+                  <span>Cement (bags)</span>
+                </div>
+                <div class="is2-cp-progress">
+                  <div class="is2-cp-progress-bar" data-bar="cement" style="width:0%;background:#4285f4;"></div>
+                </div>
+                <strong class="is2-cp-work-value" data-val="cement">0</strong>
+              </div>
+
+              <div class="is2-cp-work-row" data-work="steel">
+                <div class="is2-cp-work-name">
+                  <i class="fas fa-layer-group" style="color:#0d9c7a;"></i>
+                  <span>Steel (kg)</span>
+                </div>
+                <div class="is2-cp-progress">
+                  <div class="is2-cp-progress-bar" data-bar="steel" style="width:0%;background:#0d9c7a;"></div>
+                </div>
+                <strong class="is2-cp-work-value" data-val="steel">0</strong>
+              </div>
+
+              <div class="is2-cp-work-row" data-work="paint">
+                <div class="is2-cp-work-name">
+                  <i class="fas fa-bolt" style="color:#f5a900;"></i>
+                  <span>Paint (ltr)</span>
+                </div>
+                <div class="is2-cp-progress">
+                  <div class="is2-cp-progress-bar" data-bar="paint" style="width:0%;background:#f5a900;"></div>
+                </div>
+                <strong class="is2-cp-work-value" data-val="paint">0</strong>
+              </div>
+
+              <div class="is2-cp-work-row" data-work="tiles">
+                <div class="is2-cp-work-name">
+                  <i class="fas fa-th" style="color:#7b4ce5;"></i>
+                  <span>Tiles (box)</span>
+                </div>
+                <div class="is2-cp-progress">
+                  <div class="is2-cp-progress-bar" data-bar="tiles" style="width:0%;background:#7b4ce5;"></div>
+                </div>
+                <strong class="is2-cp-work-value" data-val="tiles">0</strong>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ========== PURCHASE PANEL ========== -->
+      <section class="is2-reports-panel"
+               data-panel="purchase"
+               role="tabpanel">
+
+        <div class="is2-reports-panel-head">
+          <h2>Purchase Reports</h2>
+          <p class="is2-reports-panel-hint">Purchase summaries and supplier-wise breakdown.</p>
+        </div>
+
+        <!-- ============ FILTERS ============ -->
+        <div class="is2-cp-filters">
+
+          <div class="is2-cp-filter">
+            <label for="is2PurFromDate">From Date</label>
+            <input type="date" id="is2PurFromDate">
+          </div>
+
+          <div class="is2-cp-filter">
+            <label for="is2PurToDate">To Date</label>
+            <input type="date" id="is2PurToDate">
+          </div>
+
+          <div class="is2-cp-filter is2-cp-filter-search">
+            <label for="is2PurSearch">Search Supplier / Item</label>
+            <div class="is2-cp-search-wrap">
+              <input type="text" id="is2PurSearch" placeholder="Supplier or item...">
+              <i class="fas fa-search"></i>
+            </div>
+          </div>
+
+          <div class="is2-cp-filter">
+            <label for="is2PurStatus">Payment Status</label>
+            <select id="is2PurStatus">
+              <option value="ALL">All Status</option>
+              <option value="PAID">Paid</option>
+              <option value="PENDING">Pending</option>
+              <option value="PARTIAL">Partial</option>
+            </select>
+          </div>
+
+          <div class="is2-cp-filter">
+            <label for="is2PurCategory">Category</label>
+            <select id="is2PurCategory">
+              <option value="ALL">All Categories</option>
+              <option value="Cement">Cement</option>
+              <option value="Steel">Steel</option>
+              <option value="Paint">Paint</option>
+              <option value="Tiles">Tiles</option>
+              <option value="Electrical">Electrical</option>
+            </select>
+          </div>
+
+          <div class="is2-cp-filter-actions">
+            <button type="button" class="is2-cp-btn is2-cp-btn-primary" id="is2PurApply">
+              <i class="fas fa-filter"></i> Apply
+            </button>
+            <button type="button" class="is2-cp-btn is2-cp-btn-ghost" id="is2PurReset">
+              <i class="fas fa-rotate-left"></i> Reset
+            </button>
+          </div>
+
+        </div>
+
+        <!-- ============ KPI CARDS ============ -->
+        <div class="is2-cp-kpis">
+
+          <article class="is2-cp-kpi is2-cp-kpi-blue">
+            <div class="is2-cp-kpi-icon"><i class="fas fa-cart-shopping"></i></div>
+            <div class="is2-cp-kpi-body">
+              <span class="is2-cp-kpi-label">TOTAL ORDERS</span>
+              <strong class="is2-cp-kpi-value" id="is2PurTotalOrders">0</strong>
+              <small>Purchase orders</small>
+            </div>
+          </article>
+
+          <article class="is2-cp-kpi is2-cp-kpi-green">
+            <div class="is2-cp-kpi-icon"><i class="fas fa-indian-rupee-sign"></i></div>
+            <div class="is2-cp-kpi-body">
+              <span class="is2-cp-kpi-label">TOTAL PURCHASE</span>
+              <strong class="is2-cp-kpi-value" id="is2PurTotalValue">₹0</strong>
+              <small>Gross purchase amount</small>
+            </div>
+          </article>
+
+          <article class="is2-cp-kpi is2-cp-kpi-purple">
+            <div class="is2-cp-kpi-icon"><i class="fas fa-receipt"></i></div>
+            <div class="is2-cp-kpi-body">
+              <span class="is2-cp-kpi-label">PAID AMOUNT</span>
+              <strong class="is2-cp-kpi-value" id="is2PurPaidAmount">₹0</strong>
+              <small>Amount paid to suppliers</small>
+            </div>
+          </article>
+
+          <article class="is2-cp-kpi is2-cp-kpi-orange">
+            <div class="is2-cp-kpi-icon"><i class="fas fa-hourglass-half"></i></div>
+            <div class="is2-cp-kpi-body">
+              <span class="is2-cp-kpi-label">BALANCE PAYABLE</span>
+              <strong class="is2-cp-kpi-value" id="is2PurBalance">₹0</strong>
+              <small>Outstanding to suppliers</small>
+            </div>
+          </article>
+
+        </div>
+
+        <!-- ============ TOP SUPPLIERS SUMMARY ============ -->
+        <div class="is2-cp-summary">
+
+          <div class="is2-cp-summary-head">
+            <h3>
+              TOP SUPPLIERS
+              <span class="is2-cp-summary-sub">(by value)</span>
+            </h3>
+            <div class="is2-cp-summary-total">
+              Total Suppliers: <strong id="is2PurTotalSuppliers">0</strong>
+            </div>
+          </div>
+
+          <div class="is2-cp-summary-grid is2-single-col">
+
+            <div class="is2-cp-summary-col">
+
+              <div class="is2-cp-work-row" data-work="supplier_a">
+                <div class="is2-cp-work-name">
+                  <i class="fas fa-truck" style="color:#4285f4;"></i>
+                  <span>Supplier A</span>
+                </div>
+                <div class="is2-cp-progress">
+                  <div class="is2-cp-progress-bar" data-bar="supplier_a" style="width:0%;background:#4285f4;"></div>
+                </div>
+                <strong class="is2-cp-work-value" data-val="supplier_a">0</strong>
+              </div>
+
+              <div class="is2-cp-work-row" data-work="supplier_b">
+                <div class="is2-cp-work-name">
+                  <i class="fas fa-truck" style="color:#0d9c7a;"></i>
+                  <span>Supplier B</span>
+                </div>
+                <div class="is2-cp-progress">
+                  <div class="is2-cp-progress-bar" data-bar="supplier_b" style="width:0%;background:#0d9c7a;"></div>
+                </div>
+                <strong class="is2-cp-work-value" data-val="supplier_b">0</strong>
+              </div>
+
+              <div class="is2-cp-work-row" data-work="supplier_c">
+                <div class="is2-cp-work-name">
+                  <i class="fas fa-truck" style="color:#f5a900;"></i>
+                  <span>Supplier C</span>
+                </div>
+                <div class="is2-cp-progress">
+                  <div class="is2-cp-progress-bar" data-bar="supplier_c" style="width:0%;background:#f5a900;"></div>
+                </div>
+                <strong class="is2-cp-work-value" data-val="supplier_c">0</strong>
+              </div>
+
+              <div class="is2-cp-work-row" data-work="supplier_d">
+                <div class="is2-cp-work-name">
+                  <i class="fas fa-truck" style="color:#7b4ce5;"></i>
+                  <span>Supplier D</span>
+                </div>
+                <div class="is2-cp-progress">
+                  <div class="is2-cp-progress-bar" data-bar="supplier_d" style="width:0%;background:#7b4ce5;"></div>
+                </div>
+                <strong class="is2-cp-work-value" data-val="supplier_d">0</strong>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+
+      </section>
+
+<!-- ========== ATTENDANCE PANEL ========== -->
+<section class="is2-reports-panel"
+         data-panel="attendance"
+         role="tabpanel">
+
+  <div class="is2-reports-panel-head">
+    <h2>Attendance Reports</h2>
+    <p class="is2-reports-panel-hint">Monthly attendance, working hours and wage summaries.</p>
+  </div>
+
+  <!-- ============ FILTERS (Month + Year) ============ -->
+  <div class="is2-cp-filters is2-att-filters">
+
+    <div class="is2-cp-filter">
+      <label for="is2AttMonth">Month</label>
+      <select id="is2AttMonth">
+        <option value="01">January</option>
+        <option value="02">February</option>
+        <option value="03">March</option>
+        <option value="04">April</option>
+        <option value="05">May</option>
+        <option value="06">June</option>
+        <option value="07">July</option>
+        <option value="08">August</option>
+        <option value="09">September</option>
+        <option value="10">October</option>
+        <option value="11">November</option>
+        <option value="12">December</option>
+      </select>
+    </div>
+
+    <div class="is2-cp-filter">
+      <label for="is2AttYear">Year</label>
+      <select id="is2AttYear">
+        <option value="2025">2025</option>
+        <option value="2026">2026</option>
+        <option value="2027">2027</option>
+      </select>
+    </div>
+
+    <div class="is2-cp-filter is2-cp-filter-search">
+      <label for="is2AttSearch">Search Employee</label>
+      <div class="is2-cp-search-wrap">
+        <input type="text" id="is2AttSearch" placeholder="Search by name...">
+        <i class="fas fa-search"></i>
+      </div>
+    </div>
+
+    <div class="is2-cp-filter">
+      <label for="is2AttDepartment">Department</label>
+      <select id="is2AttDepartment">
+        <option value="ALL">All Departments</option>
+        <option value="Production">Production</option>
+        <option value="Accounts">Accounts</option>
+        <option value="HR">HR</option>
+        <option value="Sales">Sales</option>
+      </select>
+    </div>
+
+    <div class="is2-cp-filter">
+      <label for="is2AttStatus">Payment Status</label>
+      <select id="is2AttStatus">
+        <option value="ALL">All Payment Status</option>
+        <option value="PAID">Paid</option>
+        <option value="PARTIAL">Partially Paid</option>
+        <option value="PENDING">Pending</option>
+      </select>
+    </div>
+
+    <div class="is2-cp-filter-actions">
+      <button type="button" class="is2-cp-btn is2-cp-btn-primary" id="is2AttApply">
+        <i class="fas fa-filter"></i> Apply
+      </button>
+      <button type="button" class="is2-cp-btn is2-cp-btn-ghost" id="is2AttReset">
+        <i class="fas fa-rotate-left"></i> Reset
+      </button>
+    </div>
+
+  </div>
+
+  <!-- ============ KPI CARDS ============ -->
+  <div class="is2-cp-kpis">
+
+    <article class="is2-cp-kpi is2-cp-kpi-blue">
+      <div class="is2-cp-kpi-icon"><i class="fas fa-users"></i></div>
+      <div class="is2-cp-kpi-body">
+        <span class="is2-cp-kpi-label">TOTAL EMPLOYEES</span>
+        <strong class="is2-cp-kpi-value" id="is2AttTotalEmployees">0</strong>
+        <small>Employees in report</small>
+      </div>
+    </article>
+
+    <article class="is2-cp-kpi is2-cp-kpi-green">
+      <div class="is2-cp-kpi-icon"><i class="fas fa-user-check"></i></div>
+      <div class="is2-cp-kpi-body">
+        <span class="is2-cp-kpi-label">PRESENT DAYS</span>
+        <strong class="is2-cp-kpi-value" id="is2AttTotalPresent">0</strong>
+        <small>Total present days</small>
+      </div>
+    </article>
+
+    <article class="is2-cp-kpi is2-cp-kpi-purple">
+      <div class="is2-cp-kpi-icon"><i class="fas fa-indian-rupee-sign"></i></div>
+      <div class="is2-cp-kpi-body">
+        <span class="is2-cp-kpi-label">TOTAL PAYABLE</span>
+        <strong class="is2-cp-kpi-value" id="is2AttTotalPayable">₹0</strong>
+        <small>Gross wage payable</small>
+      </div>
+    </article>
+
+    <article class="is2-cp-kpi is2-cp-kpi-orange">
+      <div class="is2-cp-kpi-icon"><i class="fas fa-hourglass-half"></i></div>
+      <div class="is2-cp-kpi-body">
+        <span class="is2-cp-kpi-label">TOTAL DUE</span>
+        <strong class="is2-cp-kpi-value" id="is2AttTotalDue">₹0</strong>
+        <small>Outstanding wages</small>
+      </div>
+    </article>
+
+  </div>
+
+  <!-- ============ DEPARTMENT SUMMARY ============ -->
+  <div class="is2-cp-summary">
+
+    <div class="is2-cp-summary-head">
+      <h3>
+        DEPARTMENT SUMMARY
+        <span class="is2-cp-summary-sub">(total payable)</span>
+      </h3>
+      <div class="is2-cp-summary-total">
+        Total Paid: <strong id="is2AttTotalPaid">₹0</strong>
+      </div>
+    </div>
+
+    <div class="is2-cp-summary-grid is2-single-col">
+
+      <div class="is2-cp-summary-col">
+
+        <div class="is2-cp-work-row" data-work="production">
+          <div class="is2-cp-work-name">
+            <i class="fas fa-industry" style="color:#4285f4;"></i>
+            <span>Production</span>
+          </div>
+          <div class="is2-cp-progress">
+            <div class="is2-cp-progress-bar" data-bar="production" style="width:0%;background:#4285f4;"></div>
+          </div>
+          <strong class="is2-cp-work-value" data-val="production">₹0</strong>
+        </div>
+
+        <div class="is2-cp-work-row" data-work="accounts">
+          <div class="is2-cp-work-name">
+            <i class="fas fa-calculator" style="color:#0d9c7a;"></i>
+            <span>Accounts</span>
+          </div>
+          <div class="is2-cp-progress">
+            <div class="is2-cp-progress-bar" data-bar="accounts" style="width:0%;background:#0d9c7a;"></div>
+          </div>
+          <strong class="is2-cp-work-value" data-val="accounts">₹0</strong>
+        </div>
+
+        <div class="is2-cp-work-row" data-work="hr">
+          <div class="is2-cp-work-name">
+            <i class="fas fa-user-tie" style="color:#f5a900;"></i>
+            <span>HR</span>
+          </div>
+          <div class="is2-cp-progress">
+            <div class="is2-cp-progress-bar" data-bar="hr" style="width:0%;background:#f5a900;"></div>
+          </div>
+          <strong class="is2-cp-work-value" data-val="hr">₹0</strong>
+        </div>
+
+        <div class="is2-cp-work-row" data-work="sales">
+          <div class="is2-cp-work-name">
+            <i class="fas fa-chart-line" style="color:#7b4ce5;"></i>
+            <span>Sales</span>
+          </div>
+          <div class="is2-cp-progress">
+            <div class="is2-cp-progress-bar" data-bar="sales" style="width:0%;background:#7b4ce5;"></div>
+          </div>
+          <strong class="is2-cp-work-value" data-val="sales">₹0</strong>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+</section>
+
+    </div>
+  </div>
+</div>

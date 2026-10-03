@@ -1,0 +1,271 @@
+<div class="parties-layout page-view" data-page="contractors">
+    <div class="parties-list-panel">
+        <div class="panel-header">
+            <h3><i class="fa-solid fa-users"></i> Contractors</h3>
+            <button class="btn-green-sm" id="addContractorBtn">Add Contractor</button>
+        </div>
+       <div class="search-filter">
+    <input type="text" id="partySearch" placeholder="Search Contractor Name">
+</div>
+
+<div class="list-filters">
+    <div class="list-filter-row">
+        <label for="filterFromDate">From</label>
+        <input type="date" id="filterFromDate">
+    </div>
+    <div class="list-filter-row">
+        <label for="filterToDate">To</label>
+        <input type="date" id="filterToDate">
+    </div>
+
+    <!-- Multi-select location -->
+    <div class="list-filter-row list-filter-row--block">
+        <label>Location</label>
+        <div class="ms" id="locMultiSelect">
+            <button type="button" class="ms-toggle" id="locToggle">
+                <span id="locToggleLabel">All Locations</span>
+                <i class="fa-solid fa-chevron-down ms-caret"></i>
+            </button>
+            <div class="ms-menu" id="locMenu" hidden>
+                <label class="ms-option ms-all">
+                    <input type="checkbox" id="locSelectAll">
+                    <span>All Locations</span>
+                </label>
+                <div class="ms-options" id="locOptions">
+                    <!-- populated by JS from LOCATIONS constant -->
+                </div>
+            </div>
+        </div>
+        <select id="filterLocation" multiple hidden aria-hidden="true" tabindex="-1"></select>
+    </div>
+
+    <div class="list-filter-actions">
+        <button type="button" class="list-filter-apply" id="applyListFilters">
+            <i class="fa-solid fa-filter"></i> Apply
+        </button>
+        <button type="button" class="list-filter-reset" id="resetListFilters">
+            <i class="fa-solid fa-rotate-left"></i> Reset
+        </button>
+    </div>
+
+    <span class="list-filter-badge" id="listFilterBadge" hidden></span>
+</div>
+        <div class="table-container">
+            <table class="data-table" id="partiesTable">
+                <thead><tr><th>Contractor Name</th><th class="text-right">Balance</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="party-details-panel">
+        <div class="details-header">
+            <div class="party-title">
+                <div class="avatar" id="contractorAvatar">V</div>
+                <div>
+                    <h2><span id="contractorNameHeading">Vishnu Jadhav</span> <i class="fa-solid fa-pencil edit-icon" id="editContractorInline"></i></h2>
+                    <p id="contractorSubheading">Balance: ₹ 8,220.00</p>
+                </div>
+            </div>
+            <div class="detail-header-right">
+                <div class="party-status"><span class="status-badge status-pending" id="contractorStatusHeading">PENDING</span></div>
+                <div class="contractor-actions">
+                    <button class="contractor-action secondary" id="rateCardBtn"><i class="fa-solid fa-table-list"></i> Rate Card</button>
+                    <button class="contractor-action primary" id="addPaymentBtn"><i class="fa-solid fa-plus"></i> Add Payment</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="work">Work Entries</button>
+            <button class="tab" data-tab="payment">Payment</button>
+            <button class="tab" data-tab="summary">Summary</button>
+        </div>
+
+        <div class="tab-body" data-body="work">
+            <div class="tab-toolbar">
+                <div><strong>Contractor Work Entries</strong></div>
+                <button class="contractor-action primary" id="addWorkEntryBtn"><i class="fa-solid fa-plus"></i> Add Work Entry</button>
+            </div>
+            <div class="table-container">
+                <table class="data-table details-table" id="workEntriesTable">
+                    <thead><tr>
+                        <th>Date</th><th>Location</th><th class="text-right">Fabrication</th>
+                        <th class="text-right">Cement Sheet</th><th class="text-right">Electrical</th>
+                        <th class="text-right">Tiles</th><th class="text-right">Plumbing</th>
+                        <th class="text-right">Door Fitting</th><th class="text-right">Outer Colour</th>
+                        <th class="text-right">Inner Colour</th><th class="text-right">Amount</th><th>Action</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="table-footer" id="workFooter">Showing 0 entries</div>
+        </div>
+
+        <div class="tab-body" data-body="payment" style="display:none;">
+            <div class="table-container">
+                <table class="data-table details-table" id="paymentsTable">
+                    <thead><tr><th>Date</th><th>Paid By</th><th>Mode</th><th>Remarks</th><th class="text-right">Amount</th><th>Action</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="table-footer" id="paymentFooter">Showing 0 entries</div>
+        </div>
+
+        <div class="tab-body" data-body="summary" style="display:none;">
+            <div class="contractor-summary-grid" id="contractorSummaryBody"></div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="rateCardModal" style="display:none;">
+    <div class="payment-modal" style="width:min(980px,100%);">
+        <div class="modal-header">
+            <div><h2>Contractor Rate Card</h2><p>Add rates from an effective date and view rate history</p></div>
+            <button class="modal-close" id="closeRateCardModal">×</button>
+        </div>
+        <form id="rateCardForm">
+            <div style="padding:20px;">
+                <div class="form-grid rate-form-grid">
+                    <div class="form-group"><label>Contractor</label><select id="rateCardContractor" required></select></div>
+                    <div class="form-group"><label>Effective Date</label><input type="date" id="rateCardDate" required></div>
+                    <div class="form-group"><label>Fabrication</label><input type="number" id="rateFabrication" min="0" step="0.01" required></div>
+                    <div class="form-group"><label>Cement Sheet</label><input type="number" id="rateCementSheet" min="0" step="0.01" required></div>
+                    <div class="form-group"><label>Electrical</label><input type="number" id="rateElectrical" min="0" step="0.01" required></div>
+                    <div class="form-group"><label>Tiles</label><input type="number" id="rateTiles" min="0" step="0.01" required></div>
+                    <div class="form-group"><label>Plumbing</label><input type="number" id="ratePlumbing" min="0" step="0.01" required></div>
+                    <div class="form-group"><label>Door Fitting</label><input type="number" id="rateDoorFitting" min="0" step="0.01" required></div>
+                    <div class="form-group"><label>Outer Colour</label><input type="number" id="rateOuterColour" min="0" step="0.01" required></div>
+                    <div class="form-group"><label>Inner Colour</label><input type="number" id="rateInnerColour" min="0" step="0.01" required></div>
+                </div>
+                <div class="rate-history">
+                    <h3>Rate History</h3>
+                    <div class="table-container"><table class="data-table">
+                        <thead><tr><th>Effective Date</th><th>Fabrication</th><th>Cement</th><th>Electrical</th><th>Tiles</th><th>Plumbing</th><th>Door</th><th>Outer</th><th>Inner</th></tr></thead>
+                        <tbody id="rateHistoryBody"></tbody>
+                    </table></div>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding:0 20px 20px;">
+                <button type="button" class="modal-cancel" id="cancelRateCardBtn">Close</button>
+                <button type="submit" class="modal-save">Save Rate Card</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-overlay" id="contractorModal" style="display:none;">
+    <div class="payment-modal" style="width:min(850px,100%);">
+        <div class="modal-header">
+            <div><h2 id="contractorModalTitle">Add Contractor</h2><p>Enter contractor details and work quantities</p></div>
+            <button class="modal-close" id="closeContractorModal">×</button>
+        </div>
+        <form id="contractorForm">
+            <input type="hidden" id="contractorIdInput">
+            <div style="padding:20px;">
+                <div class="form-grid">
+                    <div class="form-group"><label>Contractor Name</label><input type="text" id="contractorNameInput" required></div>
+                    <div class="form-group"><label>Entry Date</label><input type="date" id="contractorDateInput" required></div>
+                </div>
+                <div class="location-entry-section">
+                    <div class="location-entry-header"><span>Location Work Entry</span></div>
+                    <div class="form-grid" style="align-items:end;">
+                        <div class="form-group"><label>Select Location</label><select id="entryLocationSelect">
+                            <option value="">Select Location</option><option>Arneel industries karodi</option>
+                            <option>Anil industries karodi</option><option>Anil industries ghanegoan</option>
+                            <option>Anil industries yavatmal</option><option>Kpr projections</option>
+                        </select></div>
+                        <div class="form-group"><label>&nbsp;</label><button type="button" class="add-location-btn" id="addLocationEntryBtn">＋ Add Location Entry</button></div>
+                    </div>
+                    <div class="work-qty-grid">
+                        <div class="form-group"><label>Fabrication Qty</label><input type="number" id="fabricationInput" min="0" step="0.01" value="0"></div>
+                        <div class="form-group"><label>Cement Sheet Qty</label><input type="number" id="cementSheetInput" min="0" step="0.01" value="0"></div>
+                        <div class="form-group"><label>Electrical Qty</label><input type="number" id="electricalInput" min="0" step="0.01" value="0"></div>
+                        <div class="form-group"><label>Tiles Qty</label><input type="number" id="tilesInput" min="0" step="0.01" value="0"></div>
+                        <div class="form-group"><label>Plumbing Qty</label><input type="number" id="plumbingInput" min="0" step="0.01" value="0"></div>
+                        <div class="form-group"><label>Door Fitting Qty</label><input type="number" id="doorFittingInput" min="0" step="0.01" value="0"></div>
+                        <div class="form-group"><label>Outer Colour Qty</label><input type="number" id="outerColourInput" min="0" step="0.01" value="0"></div>
+                        <div class="form-group"><label>Inner Colour Qty</label><input type="number" id="innerColourInput" min="0" step="0.01" value="0"></div>
+                    </div>
+                </div>
+                <div class="added-locations-section" id="addedLocationsSection" style="display:none;">
+                    <div class="added-locations-header"><span>Added Location Entries</span><button type="button" class="clear-all-btn" id="clearAllLocationsBtn">Clear All</button></div>
+                    <div class="table-container"><table class="added-locations-table">
+                        <thead><tr><th>Location</th><th>Fab</th><th>Cem</th><th>Elec</th><th>Tiles</th><th>Plumb</th><th>Door</th><th>Outer</th><th>Inner</th><th>Action</th></tr></thead>
+                        <tbody id="addedLocationsBody"></tbody>
+                    </table></div>
+                </div>
+                <div class="form-grid" style="margin-top:12px;">
+                    <div class="form-group full-width"><label>Total Amount</label><input type="number" id="totalAmountInput" value="0" readonly></div>
+                    <div class="form-group full-width"><label>Remark</label><textarea id="contractorRemarkInput" rows="2"></textarea></div>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding:0 20px 20px;">
+                <button type="button" class="modal-cancel" id="cancelContractorBtn">Cancel</button>
+                <button type="submit" class="modal-save">Save Contractor</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-overlay" id="workEntryModal" style="display:none;">
+    <div class="payment-modal" style="width:min(700px,100%);">
+        <div class="modal-header">
+            <div><h2 id="workEntryModalTitle">Add Work Entry</h2><p>Add or update work quantities</p></div>
+            <button class="modal-close" id="closeWorkEntryModal">×</button>
+        </div>
+        <form id="workEntryForm">
+            <input type="hidden" id="workEntryId">
+            <div style="padding:20px;">
+                <div class="form-grid">
+                    <div class="form-group"><label>Location</label><select id="workEntryLocation" required>
+                        <option value="">Select Location</option><option>Arneel industries karodi</option>
+                        <option>Anil industries karodi</option><option>Anil industries ghanegoan</option>
+                        <option>Anil industries yavatmal</option><option>Kpr projections</option>
+                    </select></div>
+                    <div class="form-group"><label>Date</label><input type="date" id="workEntryDate" required></div>
+                </div>
+                <div class="work-qty-grid">
+                    <div class="form-group"><label>Fabrication Qty</label><input type="number" id="workEntryFabrication" min="0" step="0.01" value="0"></div>
+                    <div class="form-group"><label>Cement Sheet Qty</label><input type="number" id="workEntryCementSheet" min="0" step="0.01" value="0"></div>
+                    <div class="form-group"><label>Electrical Qty</label><input type="number" id="workEntryElectrical" min="0" step="0.01" value="0"></div>
+                    <div class="form-group"><label>Tiles Qty</label><input type="number" id="workEntryTiles" min="0" step="0.01" value="0"></div>
+                    <div class="form-group"><label>Plumbing Qty</label><input type="number" id="workEntryPlumbing" min="0" step="0.01" value="0"></div>
+                    <div class="form-group"><label>Door Fitting Qty</label><input type="number" id="workEntryDoorFitting" min="0" step="0.01" value="0"></div>
+                    <div class="form-group"><label>Outer Colour Qty</label><input type="number" id="workEntryOuterColour" min="0" step="0.01" value="0"></div>
+                    <div class="form-group"><label>Inner Colour Qty</label><input type="number" id="workEntryInnerColour" min="0" step="0.01" value="0"></div>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding:0 20px 20px;">
+                <button type="button" class="modal-cancel" id="cancelWorkEntryBtn">Cancel</button>
+                <button type="submit" class="modal-save">Save Work Entry</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-overlay" id="paymentModal" style="display:none;">
+    <div class="payment-modal">
+        <div class="modal-header">
+            <div><h2 id="paymentModalTitle">Add Payment</h2><p>Record a payment</p></div>
+            <button class="modal-close" id="closePaymentModal">×</button>
+        </div>
+        <form id="paymentForm">
+            <input type="hidden" id="paymentId">
+            <div class="form-grid" style="padding:20px;">
+                <div class="form-group"><label>Contractor</label><select id="paymentContractor" required></select></div>
+                <div class="form-group"><label>Payment Date</label><input type="date" id="paymentDate" required></div>
+                <div class="form-group"><label>Amount</label><input type="number" id="paymentAmount" min="0" step="0.01" required></div>
+                <div class="form-group"><label>Mode</label><select id="paymentMode">
+                    <option>Online</option><option>Cash</option><option>Cheque</option><option>Bank Transfer</option>
+                </select></div>
+                <div class="form-group full-width"><label>Paid By</label><input type="text" id="paidBy"></div>
+                <div class="form-group full-width"><label>Remarks</label><textarea id="paymentRemarks" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer" style="padding:0 20px 20px;">
+                <button type="button" class="modal-cancel" id="cancelPaymentBtn">Cancel</button>
+                <button type="submit" class="modal-save">Save Payment</button>
+            </div>
+        </form>
+    </div>
+</div>

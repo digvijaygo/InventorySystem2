@@ -1,0 +1,552 @@
+/* =========================================================
+   InventorySystem2 — Reports page
+   Scoped under #is2-reports so nothing leaks
+   ========================================================= */
+
+/* ---- local reset ---- */
+#is2-reports,
+#is2-reports * {
+  box-sizing: border-box;
+}
+
+#is2-reports {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  color: #1e293b;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 20px 30px;
+}
+
+/* ============ HEADER ============ */
+#is2-reports .is2-reports-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #eef2f6;
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+#is2-reports .is2-reports-head h1 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+#is2-reports .is2-reports-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+#is2-reports .is2-firm-select {
+  padding: 6px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #fff;
+  font-size: 12.5px;
+  color: #475569;
+  cursor: pointer;
+  font-family: inherit;
+}
+#is2-reports .is2-reports-btn {
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  transition: all .18s;
+  background: #fff;
+  color: #475569;
+}
+#is2-reports .is2-reports-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+/* ============ TABS ============ */
+#is2-reports .is2-reports-tabs {
+  display: flex;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid #eef2f6;
+  border-radius: 12px;
+  padding: 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+#is2-reports .is2-reports-tabs::-webkit-scrollbar { height: 4px; }
+#is2-reports .is2-reports-tabs::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+#is2-reports .is2-reports-tab {
+  flex: 1;
+  min-width: 130px;
+  padding: 9px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: all .18s;
+  position: relative;
+}
+#is2-reports .is2-reports-tab i {
+  font-size: 12px;
+  transition: color .18s;
+}
+#is2-reports .is2-reports-tab:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+#is2-reports .is2-reports-tab.is2-active {
+  background: #dcfce7;
+  color: #166534;
+}
+#is2-reports .is2-reports-tab.is2-active i {
+  color: #16a34a;
+}
+
+/* optional underline accent for the active tab */
+#is2-reports .is2-reports-tab.is2-active::after {
+  content: '';
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 2px;
+  background: #16a34a;
+}
+
+/* ============ PANELS ============ */
+#is2-reports .is2-reports-panels {
+  background: #fff;
+  border: 1px solid #eef2f6;
+  border-radius: 12px;
+  padding: 18px;
+  min-height: 320px;
+}
+#is2-reports .is2-reports-panel {
+  display: none;
+  animation: is2ReportsFade .22s ease-out;
+}
+#is2-reports .is2-reports-panel.is2-active {
+  display: block;
+}
+@keyframes is2ReportsFade {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+#is2-reports .is2-reports-panel-head {
+  margin-bottom: 14px;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 12px;
+}
+#is2-reports .is2-reports-panel-head h2 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 4px 0;
+}
+#is2-reports .is2-reports-panel-hint {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+}
+
+/* ============ EMPTY PLACEHOLDER ============ */
+#is2-reports .is2-reports-empty {
+  padding: 40px 20px;
+  text-align: center;
+  border: 2px dashed #e2e8f0;
+  border-radius: 10px;
+  color: #94a3b8;
+  background: #fafbfd;
+}
+#is2-reports .is2-reports-empty i {
+  font-size: 28px;
+  color: #cbd5e1;
+  margin-bottom: 10px;
+  display: block;
+}
+#is2-reports .is2-reports-empty p {
+  font-size: 12.5px;
+  margin: 0;
+}
+
+/* ============ RESPONSIVE ============ */
+@media (max-width: 640px) {
+  #is2-reports { padding: 12px 12px 24px; }
+  #is2-reports .is2-reports-tab {
+    min-width: 110px;
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+  #is2-reports .is2-reports-tab span { display: none; }
+  #is2-reports .is2-reports-tab i { font-size: 14px; }
+}
+
+/* =========================================================
+   CONTRACTOR TAB — Filters / KPIs / Work Summary
+   ========================================================= */
+
+/* ---------- FILTER BAR ---------- */
+#is2-reports .is2-cp-filters {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 14px 16px;
+  background: #fbfcfe;
+  border: 1px solid #eef2f6;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+#is2-reports .is2-cp-filter {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+#is2-reports .is2-cp-filter label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 5px;
+}
+
+#is2-reports .is2-cp-filter input,
+#is2-reports .is2-cp-filter select {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #fff;
+  font-size: 12.5px;
+  color: #1e293b;
+  font-family: inherit;
+  outline: none;
+}
+
+#is2-reports .is2-cp-filter input:focus,
+#is2-reports .is2-cp-filter select:focus {
+  border-color: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, .12);
+}
+
+#is2-reports .is2-cp-search-wrap {
+  position: relative;
+}
+
+#is2-reports .is2-cp-search-wrap i {
+  position: absolute;
+  right: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+#is2-reports .is2-cp-filter-actions {
+  display: flex;
+  gap: 6px;
+  height: 34px;
+}
+
+#is2-reports .is2-cp-btn {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  transition: all .18s;
+  white-space: nowrap;
+}
+
+#is2-reports .is2-cp-btn-primary {
+  background: #16a34a;
+  color: #fff;
+  border-color: #16a34a;
+}
+#is2-reports .is2-cp-btn-primary:hover { background: #15803d; }
+
+#is2-reports .is2-cp-btn-ghost {
+  background: #fff;
+  color: #475569;
+  border-color: #e2e8f0;
+}
+#is2-reports .is2-cp-btn-ghost:hover { background: #f8fafc; }
+
+/* ---------- KPI CARDS ---------- */
+#is2-reports .is2-cp-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+#is2-reports .is2-cp-kpi {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #eef2f6;
+  border-radius: 10px;
+  transition: box-shadow .18s, transform .18s;
+}
+#is2-reports .is2-cp-kpi:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .06);
+}
+
+#is2-reports .is2-cp-kpi-icon {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+#is2-reports .is2-cp-kpi-blue   .is2-cp-kpi-icon { background: #e0ecff; color: #1d4ed8; }
+#is2-reports .is2-cp-kpi-green  .is2-cp-kpi-icon { background: #dcfce7; color: #15803d; }
+#is2-reports .is2-cp-kpi-purple .is2-cp-kpi-icon { background: #ede9fe; color: #6d28d9; }
+#is2-reports .is2-cp-kpi-orange .is2-cp-kpi-icon { background: #ffedd5; color: #c2410c; }
+
+#is2-reports .is2-cp-kpi-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+#is2-reports .is2-cp-kpi-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  color: #64748b;
+}
+#is2-reports .is2-cp-kpi-value {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #0f172a;
+}
+#is2-reports .is2-cp-kpi-blue   .is2-cp-kpi-value { color: #1d4ed8; }
+#is2-reports .is2-cp-kpi-green  .is2-cp-kpi-value { color: #15803d; }
+#is2-reports .is2-cp-kpi-purple .is2-cp-kpi-value { color: #6d28d9; }
+#is2-reports .is2-cp-kpi-orange .is2-cp-kpi-value { color: #c2410c; }
+
+#is2-reports .is2-cp-kpi-body small {
+  font-size: 10.5px;
+  color: #94a3b8;
+}
+
+/* ---------- WORK SUMMARY ---------- */
+#is2-reports .is2-cp-summary {
+  background: #fff;
+  border: 1px solid #eef2f6;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+#is2-reports .is2-cp-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fbfcfe;
+}
+#is2-reports .is2-cp-summary-head h3 {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  color: #0f172a;
+  margin: 0;
+}
+#is2-reports .is2-cp-summary-sub {
+  font-weight: 500;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-left: 4px;
+}
+#is2-reports .is2-cp-summary-total {
+  font-size: 12px;
+  color: #475569;
+}
+#is2-reports .is2-cp-summary-total strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+#is2-reports .is2-cp-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  padding: 10px 12px 14px;
+}
+#is2-reports .is2-cp-summary-col { padding: 0 10px; }
+#is2-reports .is2-cp-summary-col:first-child {
+  border-right: 1px solid #f1f5f9;
+}
+
+#is2-reports .is2-cp-work-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 46px;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+}
+
+#is2-reports .is2-cp-work-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: #475569;
+  white-space: nowrap;
+}
+#is2-reports .is2-cp-work-name i {
+  font-size: 11px;
+  width: 14px;
+  text-align: center;
+}
+
+#is2-reports .is2-cp-progress {
+  height: 7px;
+  background: #f1f5f9;
+  border-radius: 20px;
+  overflow: hidden;
+}
+#is2-reports .is2-cp-progress-bar {
+  height: 100%;
+  border-radius: 20px;
+  transition: width .35s ease;
+}
+
+#is2-reports .is2-cp-work-value {
+  text-align: right;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+/* ---------- LOADING / EMPTY STATES ---------- */
+#is2-reports .is2-cp-loading {
+  padding: 30px 20px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 12.5px;
+}
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 1100px) {
+  #is2-reports .is2-cp-filters {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  #is2-reports .is2-cp-filter-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+  #is2-reports .is2-cp-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  #is2-reports .is2-cp-filters { grid-template-columns: 1fr; }
+  #is2-reports .is2-cp-kpis   { grid-template-columns: 1fr; }
+  #is2-reports .is2-cp-summary-grid { grid-template-columns: 1fr; }
+  #is2-reports .is2-cp-summary-col:first-child {
+    border-right: none;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+  }
+}
+
+/* =========================================================
+   SALE & PURCHASE TAB — reuse contractor styles
+   Only need one small addition for single-column summary
+   ========================================================= */
+
+#is2-reports .is2-cp-summary-grid.is2-single-col {
+  grid-template-columns: 1fr;
+}
+#is2-reports .is2-cp-summary-grid.is2-single-col .is2-cp-summary-col {
+  border-right: none;
+  padding: 0 10px;
+}
+
+/* =========================================================
+   ATTENDANCE TAB — filter bar tweak
+   (Month + Year + Search + Dept + Status + Actions)
+   ========================================================= */
+#is2-reports .is2-att-filters {
+  grid-template-columns: repeat(5, 1fr) auto;
+}
+
+@media (max-width: 1100px) {
+  #is2-reports .is2-att-filters {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  #is2-reports .is2-att-filters {
+    grid-template-columns: 1fr;
+  }
+}
+/* =========================================================
+   ATTENDANCE TAB — Month/Year filter bar
+   ========================================================= */
+#is2-reports .is2-att-filters {
+  grid-template-columns: repeat(5, 1fr) auto;
+}
+
+@media (max-width: 1100px) {
+  #is2-reports .is2-att-filters {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  #is2-reports .is2-att-filters {
+    grid-template-columns: 1fr;
+  }
+}

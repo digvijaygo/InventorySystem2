@@ -1,0 +1,222 @@
+<div class="page-view" data-page="daily-stocks" style="display:none;">
+  <div id="is2-dailystocks" class="is2-dailystocks-fragment">
+
+    <!-- ================= PAGE HEADER ================= -->
+    <div class="ds-head">
+      <h1>
+        <i class="fas fa-boxes-stacked"></i>
+        Daily Stocks
+      </h1>
+      <div class="ds-head-actions">
+        <span id="readOnlyBadge" class="ds-badge" style="display:none;">
+          Read-only mode: past date data cannot be edited.
+        </span>
+      </div>
+    </div>
+
+    <!-- ================= FILTER PANEL ================= -->
+    <section class="ds-filter-panel">
+
+      <div class="ds-field">
+        <label for="locationDropdownBtn">Location/Plant</label>
+        <div class="multi-select" id="locationMultiSelect">
+          <button type="button" id="locationDropdownBtn" class="multi-select-toggle">Select locations</button>
+          <div id="locationDropdownMenu" class="multi-select-menu" hidden>
+            <label class="multi-option select-all-option">
+              <input type="checkbox" id="locationSelectAll">
+              <span>Select All Locations</span>
+            </label>
+            <div id="locationOptions" class="multi-options-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ds-field">
+        <label for="categoryDropdownBtn">Category</label>
+        <div class="multi-select" id="categoryMultiSelect">
+          <button type="button" id="categoryDropdownBtn" class="multi-select-toggle">Select categories</button>
+          <div id="categoryDropdownMenu" class="multi-select-menu" hidden>
+            <label class="multi-option select-all-option">
+              <input type="checkbox" id="categorySelectAll">
+              <span>Select All Categories</span>
+            </label>
+            <div id="categoryOptions" class="multi-options-list"></div>
+            <div class="multi-actions-row">
+              <button type="button" id="addCategoryBtn" class="add-inline-btn">+ Add New Category</button>
+            </div>
+          </div>
+        </div>
+        <select id="categorySelect" multiple class="visually-hidden-select" aria-hidden="true" tabindex="-1"></select>
+      </div>
+
+      <div class="ds-field">
+        <label for="subCategoryDropdownBtn">Sub-Category</label>
+        <div class="multi-select" id="subCategoryMultiSelect">
+          <button type="button" id="subCategoryDropdownBtn" class="multi-select-toggle">Select sub-categories</button>
+          <div id="subCategoryDropdownMenu" class="multi-select-menu" hidden>
+            <label class="multi-option select-all-option">
+              <input type="checkbox" id="subCategorySelectAll">
+              <span>Select All Sub-Categories</span>
+            </label>
+            <div id="subCategoryOptions" class="multi-options-list"></div>
+            <div class="multi-actions-row">
+              <button type="button" id="addSubCategoryBtn" class="add-inline-btn">+ Add New Sub-Category</button>
+            </div>
+          </div>
+        </div>
+        <select id="subCategorySelect" multiple disabled class="visually-hidden-select" aria-hidden="true" tabindex="-1"></select>
+      </div>
+
+      <div class="ds-field">
+        <label for="stockDate">Date</label>
+        <input type="date" id="stockDate" required>
+      </div>
+
+      <div class="ds-field">
+        <label for="cabinCountInput">Cabin Count</label>
+        <input type="number" id="cabinCountInput" min="1" step="1" value="20" required>
+      </div>
+
+      <div class="ds-field">
+        <label>&nbsp;</label>
+        <button id="loadBtn" type="button" class="ds-btn ds-btn-primary">
+          <i class="fas fa-filter"></i> Load Details
+        </button>
+      </div>
+
+    </section>
+
+    <!-- ================= TOOLBAR ================= -->
+    <div class="ds-section-header">
+      <h2>Current Stock</h2>
+      <div class="ds-toolbar">
+        <input type="text" id="findInput" placeholder="Find by any text...">
+        <button id="findBtn" type="button" class="ds-btn ds-btn-ghost"><i class="fas fa-search"></i> Find</button>
+        <button id="clearFindBtn" type="button" class="ds-btn ds-btn-ghost"><i class="fas fa-xmark"></i> Clear</button>
+        <button id="openAddRecordBtn" type="button" class="ds-btn ds-btn-primary"><i class="fas fa-plus"></i> Add Record</button>
+        <button id="importExcelBtn" type="button" class="ds-btn ds-btn-ghost"><i class="fas fa-file-import"></i> Import</button>
+        <button id="exportExcelBtn" type="button" class="ds-btn ds-btn-export"><i class="fas fa-file-export"></i> Export</button>
+        <input id="importExcelInput" type="file" accept=".xlsx,.xls,.csv" hidden>
+      </div>
+    </div>
+
+    <!-- ================= TABLE ================= -->
+    <div class="ds-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>SR NO</th>
+            <th>CATEGORY</th>
+            <th id="descriptionHeader">SUB-CATEGORY</th>
+            <th>QTY FOR 1 CABIN (20 FT) in NOS</th>
+            <th id="qtyForCountHeader">QTY FOR 20 CABIN (20 FT) in NOS</th>
+            <th>STOCK Available</th>
+            <th>REQUIRED</th>
+            <th>Cabin Wise Stock</th>
+            <th>ACTIONS</th>
+          </tr>
+        </thead>
+        <tbody id="stocksTableBody"></tbody>
+      </table>
+    </div>
+
+    <!-- ================= SUMMARY CHART ================= -->
+    <section class="ds-chart-panel" aria-label="Daily stock summary">
+      <div class="summary-header">
+        <div>
+          <h2>DAILY STOCK SUMMARY <span>(Current Selection)</span></h2>
+          <p>Stock position for the selected location, category and date.</p>
+        </div>
+        <div class="summary-total">
+          Total Available Stock:
+          <strong id="totalStockSummary">0</strong>
+        </div>
+      </div>
+      <div class="chart-content">
+        <div class="donut-wrap">
+          <div id="dailyStockDonut" class="donut-chart" role="img" aria-label="Donut chart for stock totals"></div>
+        </div>
+        <div class="donut-legend" id="donutLegend">
+          <div class="legend-item">
+            <span class="legend-dot stock-dot"></span>
+            <span class="legend-label">Available Stock</span>
+            <span class="legend-track"><span class="legend-bar stock-bar" id="stockLegendBar"></span></span>
+            <strong id="totalStockAtKpr">0</strong>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot required-dot"></span>
+            <span class="legend-label">Required / Surplus</span>
+            <span class="legend-track"><span class="legend-bar required-bar" id="requiredLegendBar"></span></span>
+            <strong id="totalRequired">0</strong>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot cabin-dot"></span>
+            <span class="legend-label">Cabin Wise Stock</span>
+            <span class="legend-track"><span class="legend-bar cabin-bar" id="cabinLegendBar"></span></span>
+            <strong id="totalCabinWiseStock">0</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  <!-- ================= ADD RECORD MODAL ================= -->
+  <div id="recordModal" class="ds-modal-overlay" style="display:none;">
+    <div class="ds-modal-card">
+      <div class="modal-header">
+        <div>
+          <h2>Add Record</h2>
+          <p>Create daily stock rows for selected categories and sub-categories</p>
+        </div>
+        <button type="button" id="closeRecordModalBtn" class="modal-close">&times;</button>
+      </div>
+
+      <form id="addRowForm" class="add-form modal-form">
+        <select id="itemLocationInput" required></select>
+
+        <div class="multi-select modal-multi-select" id="recordCategoryMultiSelect">
+          <button type="button" id="recordCategoryDropdownBtn" class="multi-select-toggle">Select categories</button>
+          <div id="recordCategoryDropdownMenu" class="multi-select-menu" hidden>
+            <label class="multi-option select-all-option">
+              <input type="checkbox" id="recordCategorySelectAll">
+              <span>Select All Categories</span>
+            </label>
+            <div id="recordCategoryOptions" class="multi-options-list"></div>
+          </div>
+        </div>
+        <select id="recordCategoryInput" multiple required class="visually-hidden-select" aria-hidden="true" tabindex="-1"></select>
+
+        <div class="multi-select modal-multi-select" id="recordSubCategoryMultiSelect">
+          <button type="button" id="recordSubCategoryDropdownBtn" class="multi-select-toggle">Select sub-categories</button>
+          <div id="recordSubCategoryDropdownMenu" class="multi-select-menu" hidden>
+            <label class="multi-option select-all-option">
+              <input type="checkbox" id="recordSubCategorySelectAll">
+              <span>Select All Sub-Categories</span>
+            </label>
+            <div id="recordSubCategoryOptions" class="multi-options-list"></div>
+            <div class="multi-actions-row">
+              <button type="button" id="addRecordSubCategoryBtn" class="add-inline-btn">+ Add New Sub-Category</button>
+            </div>
+          </div>
+        </div>
+        <select id="recordSubCategoryInput" multiple required class="visually-hidden-select" aria-hidden="true" tabindex="-1"></select>
+
+        <input type="number" id="qtyOneInput" placeholder="QTY FOR 1 CABIN" min="0" step="0.01" required>
+        <input type="number" id="stockInput" placeholder="STOCK Available" step="0.01" required>
+        <p class="record-date-note">Record date: <strong id="recordDateDisplay"></strong> (today)</p>
+<div class="modal-actions">
+  <button id="cancelRecordBtn" type="button" class="ds-btn ds-btn-ghost">
+    <i class="fas fa-times"></i> Cancel
+  </button>
+  <button type="submit" class="ds-btn ds-btn-primary">
+    <i class="fas fa-check"></i> Save Record
+  </button>
+</div>
+      </form>
+    </div>
+  </div>
+
+
+  </div>
+
+
+</div>

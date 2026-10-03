@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InventorySystem2</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="contractor.css">
+    <link rel="stylesheet" href="attendance.css">
+    <link rel="stylesheet" href="users.css">
+    <link rel="stylesheet" href="sale.css">
+    <link rel="stylesheet" href="purchase.css">
+    <link rel="stylesheet" href="dashboard.css">
+    <link rel="stylesheet" href="reports.css">
+    <link rel="stylesheet" href="dailystocks.css">
+    <script src="auth-guard.js"></script>
+    <script>
+        // Disable browser scroll restoration — avoids jumping to the
+        // previously visited page's scroll position on refresh.
+        if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    </script>
+    <style>
+        /* Prevent the sidebar user name flash while the session loads */
+        #sidebarUserName.sidebar-user-loading {
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+
+        /* Hide the page host until app.js has finished initializing
+           and selected the correct page. Prevents any fragment from
+           briefly flashing on refresh. */
+        #pageHost.page-host-loading {
+            visibility: hidden;
+        }
+        #pageHost {
+            visibility: visible;
+        }
+    </style>
+</head>
+<body>
+    <header class="top-nav">
+        <div class="logo"><i class="fa-solid fa-cube"></i><span>InventorySystem2</span></div>
+        <div class="search-bar">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" placeholder="Search Clients, Invoices, products, transactions...">
+        </div>
+<div class="nav-actions">
+    <button class="btn-icon" id="refreshBtn" title="Refresh current page (Shift+R)" aria-label="Refresh">
+        <i class="fa-solid fa-rotate-right"></i>
+    </button>
+
+    <div class="quick-actions-wrap" id="quickActionsWrap">
+        <button class="btn-purple" id="quickActionsBtn" type="button"
+                aria-haspopup="true" aria-expanded="false">
+            <i class="fa-solid fa-bolt"></i> Quick Actions
+            <i class="fa-solid fa-chevron-down qa-caret"></i>
+        </button>
+        <div class="quick-actions-menu" id="quickActionsMenu" hidden>
+            <div class="qa-header">
+                <span>Quick Actions</span>
+            </div>
+            <ul class="qa-list" id="quickActionsList"></ul>
+        </div>
+    </div>
+
+    <button class="btn-icon" id="logoutBtn" type="button" title="Log out" aria-label="Log out">
+    <i class="fa-solid fa-right-from-bracket"></i>
+</button>
+</div>
+    </header>
+
+    <div class="main-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <span id="sidebarUserName" class="sidebar-user-loading"></span>
+            </div>
+            <ul class="nav-links">
+                <li data-page="dashboard" class="active"><i class="fa-solid fa-chart-pie"></i><span>Dashboard</span></li>
+                <li data-page="contractors"><i class="fa-solid fa-users"></i><span>Contractors</span></li>
+                <li data-page="attendance"><i class="fa-solid fa-calendar-check"></i><span>Attendance &amp; Payment</span></li>
+                <li><i class="fa-solid fa-box"></i><span>Products</span></li>
+                <li data-page="sale"><i class="fa-solid fa-tags"></i><span>Sale</span></li>
+                <li data-page="purchase"><i class="fa-solid fa-cart-plus"></i><span>Purchase</span></li>
+                <li class="nav-group" data-group="inventory">
+                <div class="nav-group-header">
+                <i class="fa-solid fa-warehouse"></i>
+                <span>Inventory</span>
+                <i class="fa-solid fa-chevron-down nav-chevron"></i>
+                </div>
+                <ul class="nav-submenu">
+                    <li data-page="daily-stocks"><i class="fa-solid fa-boxes-stacked"></i><span>Daily Stocks</span></li>
+                    <li data-page="stock-transfer"><i class="fa-solid fa-right-left"></i><span>Stock Transfer</span></li>
+                    <li data-page="stock-adjustment"><i class="fa-solid fa-sliders"></i><span>Stock Adjustment</span></li>
+                    <li data-page="inventory-report"><i class="fa-solid fa-chart-column"></i><span>Inventory Report</span></li>
+                    </ul>
+                    </li>
+                <li><i class="fa-solid fa-file-invoice-dollar"></i><span>Firm Management</span></li>
+                <li><i class="fa-solid fa-building-columns"></i><span>Cash &amp; Bank</span></li>
+                <li data-page="reports"><i class="fa-solid fa-file-lines"></i><span>Reports</span></li>
+                <li><i class="fa-solid fa-gear"></i><span>Utilities</span></li>
+                <li><i class="fa-solid fa-share-nodes"></i><span>Share with CA</span></li>
+                <li><i class="fa-solid fa-crown"></i><span>Plans &amp; Pricing</span></li>
+                <li data-page="users"><i class="fa-solid fa-user-shield"></i><span>Users &amp; Access</span></li>
+                <li><i class="fa-solid fa-calculator"></i><span>Accounting</span></li>
+                <li><i class="fa-solid fa-headset"></i><span>Support Centre</span></li>
+                <li><i class="fa-solid fa-sliders"></i><span>Settings</span></li>
+            </ul>
+        </aside>
+
+        <main class="content page-host-loading" id="pageHost" aria-live="polite"></main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
