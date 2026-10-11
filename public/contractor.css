@@ -732,3 +732,80 @@ color:var(--blue);background:#e3f2fd;border-left-color:var(--blue);font-weight:5
     font-weight: 600;
 }
 
+/* ===== Sidebar collapse (icons-only) ===== */
+.sidebar {
+    transition: width 0.2s ease;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.sidebar-collapse-btn {
+    background: transparent;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    opacity: 0.75;
+    flex: 0 0 auto;
+}
+.sidebar-collapse-btn:hover { opacity: 1; background: rgba(255,255,255,0.08); }
+
+/* Collapsed state */
+.sidebar.collapsed {
+    flex: 0 0 64px !important;
+    width: 64px !important;
+}
+.sidebar.collapsed .sidebar-header { justify-content: center; }
+.sidebar.collapsed #sidebarUserName { display: none; }
+
+.sidebar.collapsed .nav-links > li > span,
+.sidebar.collapsed .nav-links > li.nav-group > .nav-group-header > span,
+.sidebar.collapsed .nav-links .nav-submenu span {
+    display: none;
+}
+.sidebar.collapsed .nav-links > li,
+.sidebar.collapsed .nav-links .nav-group-header {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+}
+.sidebar.collapsed .nav-links > li > i,
+.sidebar.collapsed .nav-links .nav-group-header > i:first-child {
+    margin: 0;
+    font-size: 16px;
+}
+/* Hide chevrons / carets while collapsed */
+.sidebar.collapsed .nav-chevron { display: none; }
+
+/* Hide submenu while collapsed; show as flyout on hover */
+.sidebar.collapsed .nav-submenu {
+    display: none;
+}
+.sidebar.collapsed .nav-group { position: relative; }
+.sidebar.collapsed .nav-group:hover .nav-submenu {
+    display: block;
+    position: absolute;
+    left: 100%;
+    top: 0;
+    min-width: 200px;
+    background: inherit;
+    border-radius: 8px;
+    padding: 6px 0;
+    z-index: 1000;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+}
+.sidebar.collapsed .nav-group:hover .nav-submenu li {
+    justify-content: flex-start;
+    padding: 10px 14px;
+}
+.sidebar.collapsed .nav-group:hover .nav-submenu li span {
+    display: inline;
+}
+.sidebar.collapsed .nav-group:hover .nav-submenu li i { margin-right: 8px; }

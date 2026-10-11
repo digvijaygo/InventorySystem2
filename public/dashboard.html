@@ -17,20 +17,20 @@
     <!-- Stat cards -->
     <div class="is2-stat-cards">
       <div class="is2-stat-card">
-        <div class="is2-label">To Collect</div>
-        <div class="is2-value is2-val-green" id="is2DashToCollect"><i class="fas fa-arrow-trend-up"></i> ₹ 3,13,999</div>
+        <div class="is2-label">Total Sale <span style="color:#94a3b8;font-weight:400;">(This Month)</span></div>
+        <div class="is2-value is2-val-green" id="is2DashTotalSale"><i class="fas fa-arrow-trend-up"></i> ₹ 0</div>
       </div>
       <div class="is2-stat-card">
-        <div class="is2-label">To Pay</div>
-        <div class="is2-value is2-val-red" id="is2DashToPay"><i class="fas fa-arrow-trend-down"></i> ₹ 2,98,095</div>
+        <div class="is2-label">Outstanding <span style="color:#94a3b8;font-weight:400;">(This Month)</span></div>
+        <div class="is2-value is2-val-orange" id="is2DashOutstanding"><i class="fas fa-hourglass-half"></i> ₹ 0</div>
       </div>
       <div class="is2-stat-card">
-        <div class="is2-label">Cash in Hand</div>
-        <div class="is2-value is2-val-blue" id="is2DashCash"><i class="fas fa-wallet"></i> ₹ 4,84,993</div>
+        <div class="is2-label">Total Purchase <span style="color:#94a3b8;font-weight:400;">(This Month)</span></div>
+        <div class="is2-value is2-val-red" id="is2DashTotalPurchase"><i class="fas fa-arrow-trend-down"></i> ₹ 0</div>
       </div>
       <div class="is2-stat-card">
-        <div class="is2-label">Stock Value</div>
-        <div class="is2-value is2-val-orange" id="is2DashStock"><i class="fas fa-boxes-stacked"></i> ₹ 27,000</div>
+        <div class="is2-label">Balance Payable <span style="color:#94a3b8;font-weight:400;">(This Month)</span></div>
+        <div class="is2-value is2-val-blue" id="is2DashBalancePayable"><i class="fas fa-wallet"></i> ₹ 0</div>
       </div>
     </div>
 
@@ -40,12 +40,11 @@
       <!-- Business Overview -->
       <div class="is2-panel">
         <div class="is2-panel-head">
-          <h3>Business Overview <span class="is2-info" title="Sale vs Purchase trend">ⓘ</span></h3>
+          <h3>Business Overview <span class="is2-info" title="Sale vs Purchase trend — current month">ⓘ</span></h3>
           <div class="is2-chip-row">
-            <span class="is2-chip is2-green" id="is2DashChipSale">Sale ₹ 1,56,05,192</span>
-            <span class="is2-chip is2-red" id="is2DashChipPurchase">Purchase ₹ 2,98,09,095</span>
-            <span class="is2-chip is2-gray" id="is2DashChipExpense">Expense ₹ 200.00</span>
-            <span class="is2-chip is2-blue">30 Days <i class="fas fa-chevron-down"></i></span>
+            <span class="is2-chip is2-green" id="is2DashChipSale">Sale ₹ 0</span>
+            <span class="is2-chip is2-red" id="is2DashChipPurchase">Purchase ₹ 0</span>
+            <span class="is2-chip is2-blue" id="is2DashMonthChip">This Month</span>
           </div>
         </div>
 
@@ -57,11 +56,11 @@
 
         <div class="is2-chart-area">
           <div class="is2-chart-grid"></div>
-          <div class="is2-y-labels">
+          <div class="is2-y-labels" id="is2ChartYLabels">
             <span>8,00,000</span><span>6,00,000</span><span>4,00,000</span>
             <span>2,00,000</span><span>0</span>
           </div>
-          <svg class="is2-chart-svg" viewBox="0 0 600 220" preserveAspectRatio="none">
+          <svg class="is2-chart-svg" id="is2ChartSvg" viewBox="0 0 600 220" preserveAspectRatio="none">
             <defs>
               <linearGradient id="gGreen" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="#22c55e" stop-opacity="0.25"/>
@@ -72,16 +71,10 @@
                 <stop offset="100%" stop-color="#ef4444" stop-opacity="0"/>
               </linearGradient>
             </defs>
-            <path d="M0,200 L100,198 L200,190 L280,180 L330,60 L370,130 L440,195 L540,200 L600,200 L600,220 L0,220 Z" fill="url(#gGreen)"/>
-            <path d="M0,200 L100,198 L200,190 L280,180 L330,60 L370,130 L440,195 L540,200 L600,200" fill="none" stroke="#22c55e" stroke-width="2"/>
-            <path d="M0,205 L100,203 L200,200 L290,192 L340,120 L380,175 L450,198 L540,203 L600,203 L600,220 L0,220 Z" fill="url(#gRed)"/>
-            <path d="M0,205 L100,203 L200,200 L290,192 L340,120 L380,175 L450,198 L540,203 L600,203" fill="none" stroke="#ef4444" stroke-width="2"/>
+            <g id="is2ChartPaths"><!-- injected by JS --></g>
           </svg>
-          <div class="is2-x-labels">
-            <span>26 Jul</span><span>1 Aug</span><span>3 Aug</span><span>5 Aug</span>
-            <span>7 Aug</span><span>9 Aug</span><span>11 Aug</span><span>13 Aug</span>
-            <span>15 Aug</span><span>17 Aug</span><span>19 Aug</span><span>21 Aug</span>
-            <span>23 Aug</span><span>25 Aug</span><span>27 Aug</span>
+          <div class="is2-x-labels" id="is2ChartXLabels">
+            <!-- injected by JS -->
           </div>
         </div>
       </div>
@@ -135,14 +128,13 @@
         <!-- Low Stock Alerts -->
         <div class="is2-panel">
           <div class="is2-panel-head">
-            <h3>Low Stock Alerts</h3>
-            <span class="is2-view-all">View all</span>
+            <h3>Low Stock Alerts <span style="color:#94a3b8;font-weight:400;font-size:11px;">(&lt; 15 &middot; Today)</span></h3>
+            <span class="is2-view-all" id="is2LowStockViewAll" style="cursor:pointer;">View all</span>
           </div>
-          <div class="is2-alert-list">
-            <div class="is2-alert-item"><span class="is2-alert-name">Cement</span><span class="is2-tag">14 pcs</span></div>
-            <div class="is2-alert-item"><span class="is2-alert-name">Zed Black 800*2400 Artificial</span><span class="is2-tag">15 pcs</span></div>
-            <div class="is2-alert-item"><span class="is2-alert-name">Weatherpro 50trm Drum (Ultratech)</span><span class="is2-tag">14 pcs</span></div>
-            <div class="is2-alert-item"><span class="is2-alert-name">Zed Black 800*2400 15mm</span><span class="is2-tag">4 pcs</span></div>
+          <div class="is2-alert-list" id="is2LowStockList">
+            <div class="is2-alert-item" style="justify-content:center;color:#94a3b8;font-size:12px;background:#f8fafc;border-left-color:#cbd5e1;">
+              Loading...
+            </div>
           </div>
         </div>
 
@@ -150,29 +142,11 @@
         <div class="is2-panel">
           <div class="is2-panel-head">
             <h3>Top Selling Products</h3>
-            <span class="is2-chip is2-blue">This month</span>
+            <span class="is2-chip is2-blue" id="is2TopSellChip">This month</span>
           </div>
-          <div class="is2-sell-list">
-            <div class="is2-sell-item">
-              <div class="is2-sell-info">
-                <div class="is2-sell-icon"><i class="fas fa-layer-group"></i></div>
-                <span>Steel 10mm Polad</span>
-              </div>
-              <span class="is2-amount">₹ 71,749</span>
-            </div>
-            <div class="is2-sell-item">
-              <div class="is2-sell-info">
-                <div class="is2-sell-icon"><i class="fas fa-layer-group"></i></div>
-                <span>Steel 8mm Polad</span>
-              </div>
-              <span class="is2-amount">₹ 48,068</span>
-            </div>
-            <div class="is2-sell-item">
-              <div class="is2-sell-info">
-                <div class="is2-sell-icon"><i class="fas fa-layer-group"></i></div>
-                <span>Steel 12mm Polad</span>
-              </div>
-              <span class="is2-amount">₹ 32,968</span>
+          <div class="is2-sell-list" id="is2TopSellList">
+            <div class="is2-sell-item" style="justify-content:center;color:#94a3b8;font-size:12px;padding:16px 0;">
+              Loading...
             </div>
           </div>
         </div>

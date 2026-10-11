@@ -248,6 +248,24 @@ function computeContractorTotals(c) {
     return { totalAmount, totalPayment, balance: totalAmount - totalPayment };
 }
 
+function getFilteredWorkEntries(entries, filters = readListFilters()) {
+    const locations = filters.locations.map(location => location.toLowerCase());
+    return entries.filter(entry => {
+        if (locations.length && !locations.includes((entry.location || '').toLowerCase())) return false;
+        if (filters.fromDate && (!entry.entry_date || entry.entry_date < filters.fromDate)) return false;
+        if (filters.toDate && (!entry.entry_date || entry.entry_date > filters.toDate)) return false;
+        return true;
+    });
+}
+
+function getFilteredPayments(payments, filters = readListFilters()) {
+    return payments.filter(payment => {
+        if (filters.fromDate && (!payment.payment_date || payment.payment_date < filters.fromDate)) return false;
+        if (filters.toDate && (!payment.payment_date || payment.payment_date > filters.toDate)) return false;
+        return true;
+    });
+}
+
 /**
  * Compute totals restricted to the currently-active filters
  * (location + date range), so the header can match the list.
@@ -255,17 +273,7 @@ function computeContractorTotals(c) {
 function computeContractorTotalsFiltered(c) {
     const filters = readListFilters();
 
-    // Entries
-    const entries = (state.entriesCache[c.id] || []).filter(e => {
-        if (filters.locations.length) {
-            const loc = (e.location || '').toLowerCase();
-            const allowed = filters.locations.map(l => l.toLowerCase());
-            if (!allowed.includes(loc)) return false;
-        }
-        if (filters.fromDate && e.entry_date && e.entry_date < filters.fromDate) return false;
-        if (filters.toDate   && e.entry_date && e.entry_date > filters.toDate)   return false;
-        return true;
-    });
+    const entries = getFilteredWorkEntries(state.entriesCache[c.id] || [], filters);
     const history = state.rateHistory[c.id] || [];
     let totalAmount = 0;
     entries.forEach(e => {
@@ -274,12 +282,8 @@ function computeContractorTotalsFiltered(c) {
     });
 
     // Payments (restricted by date range only — payments don't have location)
-    const allPayments = state.paymentsCache[c.id] || [];
-    const totalPayment = allPayments.reduce((sum, p) => {
-        if (filters.fromDate && p.payment_date && p.payment_date < filters.fromDate) return sum;
-        if (filters.toDate   && p.payment_date && p.payment_date > filters.toDate)   return sum;
-        return sum + (Number(p.total_amount) || 0);
-    }, 0);
+    const payments = getFilteredPayments(state.paymentsCache[c.id] || [], filters);
+    const totalPayment = payments.reduce((sum, p) => sum + (Number(p.total_amount) || 0), 0);
 
     return { totalAmount, totalPayment, balance: totalAmount - totalPayment };
 }
@@ -338,6 +342,17 @@ async function loadContractors(search = '') {
     tbody.innerHTML = '';
     if (!rows.length) {
         tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;padding:20px;color:#999;">No contractors</td></tr>';
+        state.selectedId = null;
+        $('#contractorNameHeading').textContent = '—';
+        $('#contractorAvatar').textContent = '—';
+        $('#contractorSubheading').textContent = 'No matching contractors';
+        $('#contractorStatusHeading').textContent = '—';
+        $('#contractorStatusHeading').className = 'status-badge';
+        $('#workEntriesTable tbody').innerHTML = '<tr><td colspan="12" style="text-align:center;padding:20px;color:#999;">No matching work entries</td></tr>';
+        $('#workFooter').textContent = 'Showing 0 entries';
+        $('#paymentsTable tbody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999;">No payments</td></tr>';
+        $('#paymentFooter').textContent = 'Showing 0 entries';
+        $('#contractorSummaryBody').innerHTML = '';
         updateFilterBadge();
         return;
     }
@@ -353,7 +368,10 @@ async function loadContractors(search = '') {
         tbody.appendChild(tr);
     });
 
-    if (!state.selectedId && rows.length) selectContractor(rows[0].id);
+    if (!rows.some(c => Number(c.id) === Number(state.selectedId))) {
+        state.selectedId = null;
+        selectContractor(rows[0].id);
+    }
     updateFilterBadge();
 }
 
@@ -386,7 +404,10 @@ async function selectContractor(id) {
 function loadSummaryTab(c) {
     const summary = $('#contractorSummaryBody');
 
-    const entries = state.entriesCache[c.id] || [];
+    const filters = readListFilters();
+    const entries = hasActiveListFilters()
+        ? getFilteredWorkEntries(state.entriesCache[c.id] || [], filters)
+        : state.entriesCache[c.id] || [];
     const qtyTotals = {};
     WORK_TYPES.forEach(w => qtyTotals[w.key] = 0);
     entries.forEach(e => {
@@ -396,7 +417,9 @@ function loadSummaryTab(c) {
     });
     const totalQty = WORK_TYPES.reduce((s, w) => s + qtyTotals[w.key], 0);
 
-    const { totalAmount, totalPayment, balance } = computeContractorTotals(c);
+    const { totalAmount, totalPayment, balance } = hasActiveListFilters()
+        ? computeContractorTotalsFiltered(c)
+        : computeContractorTotals(c);
 
     summary.innerHTML = `
         <article class="contractor-summary-card amount">
@@ -434,10 +457,12 @@ async function loadWorkTab(c) {
     } catch(e){ console.warn(e); }
     state.entriesCache[c.id] = entries;
 
+    const allEntries = entries;
+    entries = hasActiveListFilters() ? getFilteredWorkEntries(entries) : entries;
     const history = state.rateHistory[c.id] || [];
 
     if (!entries.length) {
-        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:20px;color:#999;">No work entries</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:20px;color:#999;">${allEntries.length ? 'No work entries match the selected filters' : 'No work entries'}</td></tr>`;
         $('#workFooter').textContent = 'Showing 0 entries';
         return;
     }
@@ -492,12 +517,13 @@ async function loadPaymentTab(c) {
     } catch(e){ console.warn(e); }
     state.paymentsCache[c.id] = rows;
 
-    if (!rows.length) {
+    const filteredRows = hasActiveListFilters() ? getFilteredPayments(rows) : rows;
+    if (!filteredRows.length) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999;">No payments</td></tr>';
         $('#paymentFooter').textContent = 'Showing 0 entries';
         return;
     }
-    tbody.innerHTML = rows.map(p => `
+    tbody.innerHTML = filteredRows.map(p => `
         <tr>
             <td>${escapeHtml(p.payment_date || '—')}</td>
             <td>${escapeHtml(p.paid_by || '—')}</td>
@@ -510,7 +536,7 @@ async function loadPaymentTab(c) {
             </div></td>
         </tr>
     `).join('');
-    $('#paymentFooter').textContent = `Showing 1 to ${rows.length} of ${rows.length} entries`;
+    $('#paymentFooter').textContent = `Showing 1 to ${filteredRows.length} of ${filteredRows.length} entries`;
 }
 
 /* ============================================================

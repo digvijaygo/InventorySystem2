@@ -4,6 +4,9 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const path = require('path');
 const crypto = require('crypto');
+const archiver = require('archiver');
+const multer = require('multer');
+const fs = require('fs');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -12,6 +15,24 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '5mb' }));
 app.get('/', (req, res) => res.redirect('/login.html'));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Restore uploads go to a temp folder; the file is copied over the DB afterwards.
+const restoreUploadDir = path.join(__dirname, 'restore-uploads');
+if (!fs.existsSync(restoreUploadDir)) fs.mkdirSync(restoreUploadDir, { recursive: true });
+
+const restoreUpload = multer({
+  dest: restoreUploadDir,
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB cap
+  fileFilter: (_req, file, cb) => {
+    if (!/\.sqlite$/i.test(file.originalname)) {
+      return cb(new Error('Only .sqlite backup files are allowed.'));
+    }
+    cb(null, true);
+  }
+});
+
+
+
 
 const otpChallenges = new Map();
 const sessions = new Map();
@@ -136,6 +157,20 @@ db.serialize(() => {
     DAILY_STOCK_CATEGORIES.forEach((categoryName) => categoryInsert.run(categoryName));
     categoryInsert.finalize();
 
+    /* ---------- STOCK TRANSFERS ---------- */
+    db.run(`CREATE TABLE IF NOT EXISTS stock_transfers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        transfer_date TEXT NOT NULL,
+        category TEXT NOT NULL,
+        size TEXT NOT NULL,
+        from_location TEXT NOT NULL,
+        to_location TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        remarks TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_stock_transfers_date ON stock_transfers(transfer_date)`);
+
     /* ---------- CONTRACTORS ---------- */
     db.run(`CREATE TABLE IF NOT EXISTS contractors (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -228,6 +263,35 @@ db.serialize(() => {
         location TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
+
+    /* ---------- ESTIMATES / QUOTATIONS ---------- */
+db.run(`CREATE TABLE IF NOT EXISTS estimates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_date TEXT NOT NULL,
+    invoice_number TEXT NOT NULL,
+    bill_to TEXT,
+    ship_to TEXT,
+    item_name TEXT NOT NULL,
+    quantity REAL NOT NULL DEFAULT 0,
+    hsn_code TEXT,
+    rate REAL NOT NULL DEFAULT 0,
+    value_amount REAL NOT NULL DEFAULT 0,
+    discount_percent REAL DEFAULT 0,
+    discount_amount REAL DEFAULT 0,
+    cgst_percent REAL DEFAULT 0,
+    cgst_amount REAL DEFAULT 0,
+    sgst_percent REAL DEFAULT 0,
+    sgst_amount REAL DEFAULT 0,
+    igst_percent REAL DEFAULT 0,
+    igst_amount REAL DEFAULT 0,
+    amount REAL NOT NULL DEFAULT 0,
+    location TEXT,
+    remarks TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_estimates_date ON estimates(invoice_date)`);
+db.run(`CREATE INDEX IF NOT EXISTS idx_estimates_location ON estimates(location)`);
+
     // Add location column for existing DBs
     db.run(`ALTER TABLE purchase_sales ADD COLUMN location TEXT`, () => {});
     db.run(`CREATE INDEX IF NOT EXISTS idx_purchase_sales_location ON purchase_sales(location)`);
@@ -258,7 +322,36 @@ db.serialize(() => {
         UNIQUE(employee_id, date),
         FOREIGN KEY(employee_id) REFERENCES attendance_employees(id) ON DELETE CASCADE
     )`);
+    /* ---------- CA CONTACTS ---------- */
+    db.run(`CREATE TABLE IF NOT EXISTS ca_contacts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id INTEGER NOT NULL DEFAULT 1,
+        ca_name TEXT NOT NULL,
+        ca_email TEXT,
+        ca_phone TEXT,
+        ca_firm_reg TEXT,
+        auto_share_reminder INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(business_id)
+    )`);
 
+    /* ---------- CA SHARE LOGS ---------- */
+    db.run(`CREATE TABLE IF NOT EXISTS ca_share_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_id INTEGER NOT NULL DEFAULT 1,
+        ca_contact_id INTEGER,
+        share_type TEXT NOT NULL,                -- 'email' | 'whatsapp' | 'zip'
+        date_start TEXT NOT NULL,
+        date_end TEXT NOT NULL,
+        document_types TEXT NOT NULL,            -- JSON-encoded array
+        status TEXT NOT NULL DEFAULT 'pending',  -- 'pending' | 'sent' | 'failed'
+        error_message TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(ca_contact_id) REFERENCES ca_contacts(id) ON DELETE SET NULL
+    )`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_ca_share_logs_created
+            ON ca_share_logs(created_at DESC)`);
     /* ---------- Seed demo contractors (only if empty) ---------- */
     db.get("SELECT COUNT(*) AS c FROM contractors", (err, row) => {
         if (err || !row || row.c > 0) return;
@@ -332,6 +425,7 @@ app.get('/api/contractor-payments', (req, res) => {
         ? location.map(l => String(l).trim()).filter(Boolean)
         : (location ? [String(location).trim()].filter(Boolean) : []);
     const hasLocation = locationList.length > 0;
+    const hasEntryFilters = Boolean(hasLocation || hasFrom || hasTo);
     const trimmedSearch = (search && String(search).trim()) || '';
 
     const baseWhere = ['1=1'];
@@ -512,7 +606,8 @@ app.get('/api/contractor-payments', (req, res) => {
                 ELSE 'PAID'
             END AS payment_status
         FROM combined
-        ${status && status !== 'ALL' ? 'WHERE payment_status = ?' : ''}
+        WHERE ${hasEntryFilters ? 'EXISTS (SELECT 1 FROM entries_with_rates ewr WHERE ewr.contractor_id = combined.id)' : '1=1'}
+        ${status && status !== 'ALL' ? 'AND payment_status = ?' : ''}
         ORDER BY contractor_name COLLATE NOCASE ASC
     `;
 
@@ -914,6 +1009,138 @@ app.delete('/api/purchase-sales/:id', (req, res) => {
         res.json({ ok: true });
     });
 });
+
+
+/* ============================================================
+   API: ESTIMATES / QUOTATIONS
+============================================================ */
+
+// GET all estimates
+app.get('/api/estimates', (req, res) => {
+    db.all(
+        `SELECT * FROM estimates ORDER BY invoice_date DESC, id DESC`,
+        [],
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(rows || []);
+        }
+    );
+});
+
+// GET one estimate
+app.get('/api/estimates/:id', (req, res) => {
+    db.get(`SELECT * FROM estimates WHERE id=?`, [req.params.id], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(404).json({ error: 'Estimate not found' });
+        res.json(row);
+    });
+});
+
+// POST create estimate
+app.post('/api/estimates', (req, res) => {
+    const b = req.body || {};
+    const required = ['invoice_date', 'invoice_number', 'bill_to', 'item_name', 'quantity', 'rate'];
+    for (const field of required) {
+        if (b[field] === undefined || b[field] === null || b[field] === '') {
+            return res.status(400).json({ error: `Missing field: ${field}` });
+        }
+    }
+
+    const qty = n(b.quantity);
+    const rate = n(b.rate);
+    const gross = qty * rate;
+    const discountPct = n(b.discount_percent);
+    const discountAmt = gross * discountPct / 100;
+    const taxable = gross - discountAmt;
+
+    const cgstPct = n(b.cgst_percent);
+    const sgstPct = n(b.sgst_percent);
+    const igstPct = n(b.igst_percent);
+    const cgstAmt = taxable * cgstPct / 100;
+    const sgstAmt = taxable * sgstPct / 100;
+    const igstAmt = taxable * igstPct / 100;
+    const amount = taxable + cgstAmt + sgstAmt + igstAmt;
+
+    db.run(
+        `INSERT INTO estimates
+            (invoice_date, invoice_number, bill_to, ship_to,
+             item_name, quantity, hsn_code, rate, value_amount,
+             discount_percent, discount_amount,
+             cgst_percent, cgst_amount, sgst_percent, sgst_amount,
+             igst_percent, igst_amount, amount, location, remarks)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+            b.invoice_date, b.invoice_number, b.bill_to, b.ship_to || null,
+            b.item_name, qty, b.hsn_code || null, rate, taxable,
+            discountPct, discountAmt,
+            cgstPct, cgstAmt, sgstPct, sgstAmt,
+            igstPct, igstAmt, amount,
+            b.location || null, b.remarks || null
+        ],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.status(201).json({ id: this.lastID, amount });
+        }
+    );
+});
+
+// PUT update estimate
+app.put('/api/estimates/:id', (req, res) => {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+
+    const b = req.body || {};
+    const qty = n(b.quantity);
+    const rate = n(b.rate);
+    const gross = qty * rate;
+    const discountPct = n(b.discount_percent);
+    const discountAmt = gross * discountPct / 100;
+    const taxable = gross - discountAmt;
+
+    const cgstPct = n(b.cgst_percent);
+    const sgstPct = n(b.sgst_percent);
+    const igstPct = n(b.igst_percent);
+    const cgstAmt = taxable * cgstPct / 100;
+    const sgstAmt = taxable * sgstPct / 100;
+    const igstAmt = taxable * igstPct / 100;
+    const amount = taxable + cgstAmt + sgstAmt + igstAmt;
+
+    db.run(
+        `UPDATE estimates SET
+            invoice_date=?, invoice_number=?, bill_to=?, ship_to=?,
+            item_name=?, quantity=?, hsn_code=?, rate=?, value_amount=?,
+            discount_percent=?, discount_amount=?,
+            cgst_percent=?, cgst_amount=?, sgst_percent=?, sgst_amount=?,
+            igst_percent=?, igst_amount=?, amount=?, location=?, remarks=?
+         WHERE id=?`,
+        [
+            b.invoice_date, b.invoice_number, b.bill_to, b.ship_to || null,
+            b.item_name, qty, b.hsn_code || null, rate, taxable,
+            discountPct, discountAmt,
+            cgstPct, cgstAmt, sgstPct, sgstAmt,
+            igstPct, igstAmt, amount,
+            b.location || null, b.remarks || null,
+            id
+        ],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!this.changes) return res.status(404).json({ error: 'Estimate not found' });
+            res.json({ ok: true, id });
+        }
+    );
+});
+
+// DELETE estimate
+app.delete('/api/estimates/:id', (req, res) => {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
+    db.run(`DELETE FROM estimates WHERE id=?`, [id], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!this.changes) return res.status(404).json({ error: 'Estimate not found' });
+        res.json({ ok: true });
+    });
+});
+
 
 /* ============================================================
    API: SALE REPORTS (used by reports.js Sale tab)
@@ -1416,6 +1643,1043 @@ app.delete('/api/daily-stocks/:id', (req, res) => {
 });
 
 /* ============================================================
+   API: STOCK TRANSFERS
+   ============================================================ */
+app.get('/api/stock-transfers', (req, res) => {
+    const { date, category, from_location, to_location, search } = req.query;
+
+    const where = [];
+    const params = [];
+
+    if (date) {
+        if (!isValidDateString(date)) return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
+        where.push('transfer_date = ?');
+        params.push(date);
+    }
+    if (category && normalizeCategoryName(category)) {
+        where.push('category = ?');
+        params.push(normalizeCategoryName(category));
+    }
+    if (from_location && normalizeLocationName(from_location)) {
+        where.push('from_location = ?');
+        params.push(normalizeLocationName(from_location));
+    }
+    if (to_location && normalizeLocationName(to_location)) {
+        where.push('to_location = ?');
+        params.push(normalizeLocationName(to_location));
+    }
+    if (search && String(search).trim()) {
+        const term = `%${String(search).trim()}%`;
+        where.push('(category LIKE ? OR size LIKE ? OR from_location LIKE ? OR to_location LIKE ? OR remarks LIKE ?)');
+        params.push(term, term, term, term, term);
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+    db.all(
+        `SELECT id, transfer_date, category, size, from_location, to_location, quantity, remarks, created_at
+         FROM stock_transfers ${whereSql}
+         ORDER BY id DESC`,
+        params,
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(rows || []);
+        }
+    );
+});
+
+app.post('/api/stock-transfers', (req, res) => {
+    const b = req.body || {};
+    const transferDate = String(b.transfer_date || '').trim();
+    const category = normalizeCategoryName(b.category);
+    const size = String(b.size || '').trim();
+    const fromLocation = normalizeLocationName(b.from_location);
+    const toLocation = normalizeLocationName(b.to_location);
+    const quantity = Number(b.quantity);
+    const remarks = b.remarks ? String(b.remarks).trim() : '';
+
+    if (!isValidDateString(transferDate)) return res.status(400).json({ error: 'Invalid transfer_date format. Use YYYY-MM-DD.' });
+    if (transferDate !== getTodayLocalISO()) return res.status(403).json({ error: 'Transfers can only be created for today.' });
+    if (!category) return res.status(400).json({ error: 'Category is required.' });
+    if (!size) return res.status(400).json({ error: 'Sub-Category is required.' });
+    if (!isSupportedLocation(fromLocation)) return res.status(400).json({ error: 'Valid From Location is required.' });
+    if (!isSupportedLocation(toLocation)) return res.status(400).json({ error: 'Valid To Location is required.' });
+    if (fromLocation === toLocation) return res.status(400).json({ error: 'From and To locations must be different.' });
+    if (!Number.isFinite(quantity) || quantity <= 0) return res.status(400).json({ error: 'Quantity must be a positive number.' });
+
+    db.serialize(() => {
+        db.run('BEGIN IMMEDIATE TRANSACTION');
+
+        db.get(
+            `SELECT id, stock_at_kpr FROM daily_stocks
+             WHERE stock_date = ? AND location = ? AND category = ? AND size = ?`,
+            [transferDate, fromLocation, category, size],
+            (fromErr, fromRow) => {
+                if (fromErr) { db.run('ROLLBACK'); return res.status(500).json({ error: fromErr.message }); }
+                if (!fromRow) { db.run('ROLLBACK'); return res.status(400).json({ error: 'Source location has no stock recorded today for this category and sub-category.' }); }
+                if (Number(fromRow.stock_at_kpr) < quantity) {
+                    db.run('ROLLBACK');
+                    return res.status(400).json({ error: `Source has only ${fromRow.stock_at_kpr} in stock; cannot transfer ${quantity}.` });
+                }
+
+                db.get(
+                    `SELECT id, qty_for_1_cabin, qty_for_20_cabin, stock_at_kpr FROM daily_stocks
+                     WHERE stock_date = ? AND location = ? AND category = ? AND size = ?`,
+                    [transferDate, toLocation, category, size],
+                    (toErr, toRow) => {
+                        if (toErr) { db.run('ROLLBACK'); return res.status(500).json({ error: toErr.message }); }
+
+                        const finalizeInsert = (destinationId) => {
+                            db.run(
+                                `UPDATE daily_stocks SET stock_at_kpr = stock_at_kpr - ? WHERE id = ?`,
+                                [quantity, fromRow.id],
+                                (u1Err) => {
+                                    if (u1Err) { db.run('ROLLBACK'); return res.status(500).json({ error: u1Err.message }); }
+                                    db.run(
+                                        `UPDATE daily_stocks SET stock_at_kpr = stock_at_kpr + ? WHERE id = ?`,
+                                        [quantity, destinationId],
+                                        (u2Err) => {
+                                            if (u2Err) { db.run('ROLLBACK'); return res.status(500).json({ error: u2Err.message }); }
+                                            db.run(
+                                                `INSERT INTO stock_transfers
+                                                    (transfer_date, category, size, from_location, to_location, quantity, remarks)
+                                                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                                                [transferDate, category, size, fromLocation, toLocation, quantity, remarks],
+                                                function (insErr) {
+                                                    if (insErr) { db.run('ROLLBACK'); return res.status(500).json({ error: insErr.message }); }
+                                                    const transferId = this.lastID;
+                                                    db.run('COMMIT', (commitErr) => {
+                                                        if (commitErr) return res.status(500).json({ error: commitErr.message });
+                                                        res.status(201).json({ id: transferId });
+                                                    });
+                                                }
+                                            );
+                                        }
+                                    );
+                                }
+                            );
+                        };
+
+                        if (toRow) {
+                            finalizeInsert(toRow.id);
+                            return;
+                        }
+
+                        // Auto-create destination row with zero stock, then apply the transfer
+                        db.run(
+                            `INSERT INTO daily_stocks
+                                (stock_date, location, category, size, qty_for_1_cabin, qty_for_20_cabin, stock_at_kpr)
+                             VALUES (?, ?, ?, ?, 0, 0, 0)`,
+                            [transferDate, toLocation, category, size],
+                            function (createErr) {
+                                if (createErr) { db.run('ROLLBACK'); return res.status(500).json({ error: createErr.message }); }
+                                finalizeInsert(this.lastID);
+                            }
+                        );
+                    }
+                );
+            }
+        );
+    });
+});
+
+app.put('/api/stock-transfers/:id', (req, res) => {
+    const transferId = Number(req.params.id);
+    if (!Number.isInteger(transferId) || transferId <= 0) return res.status(400).json({ error: 'Invalid transfer id.' });
+
+    const b = req.body || {};
+    const category = normalizeCategoryName(b.category);
+    const size = String(b.size || '').trim();
+    const fromLocation = normalizeLocationName(b.from_location);
+    const toLocation = normalizeLocationName(b.to_location);
+    const quantity = Number(b.quantity);
+    const remarks = b.remarks ? String(b.remarks).trim() : '';
+
+    if (!category) return res.status(400).json({ error: 'Category is required.' });
+    if (!size) return res.status(400).json({ error: 'Sub-Category is required.' });
+    if (!isSupportedLocation(fromLocation)) return res.status(400).json({ error: 'Valid From Location is required.' });
+    if (!isSupportedLocation(toLocation)) return res.status(400).json({ error: 'Valid To Location is required.' });
+    if (fromLocation === toLocation) return res.status(400).json({ error: 'From and To locations must be different.' });
+    if (!Number.isFinite(quantity) || quantity <= 0) return res.status(400).json({ error: 'Quantity must be a positive number.' });
+
+    db.serialize(() => {
+        db.run('BEGIN IMMEDIATE TRANSACTION');
+
+        db.get(`SELECT * FROM stock_transfers WHERE id = ?`, [transferId], (findErr, old) => {
+            if (findErr) { db.run('ROLLBACK'); return res.status(500).json({ error: findErr.message }); }
+            if (!old) { db.run('ROLLBACK'); return res.status(404).json({ error: 'Transfer not found.' }); }
+            if (old.transfer_date !== getTodayLocalISO()) { db.run('ROLLBACK'); return res.status(403).json({ error: "Only today's transfers can be edited." }); }
+
+            // Step 1: reverse old transfer
+            db.get(
+                `SELECT id, stock_at_kpr FROM daily_stocks
+                 WHERE stock_date = ? AND location = ? AND category = ? AND size = ?`,
+                [old.transfer_date, old.to_location, old.category, old.size],
+                (destErr, destRow) => {
+                    if (destErr) { db.run('ROLLBACK'); return res.status(500).json({ error: destErr.message }); }
+                    if (!destRow || Number(destRow.stock_at_kpr) < Number(old.quantity)) {
+                        db.run('ROLLBACK');
+                        return res.status(400).json({ error: 'Cannot reverse original transfer: destination no longer has enough stock.' });
+                    }
+                    db.get(
+                        `SELECT id, stock_at_kpr FROM daily_stocks
+                         WHERE stock_date = ? AND location = ? AND category = ? AND size = ?`,
+                        [old.transfer_date, old.from_location, old.category, old.size],
+                        (srcErr, srcRow) => {
+                            if (srcErr) { db.run('ROLLBACK'); return res.status(500).json({ error: srcErr.message }); }
+                            if (!srcRow) { db.run('ROLLBACK'); return res.status(400).json({ error: 'Cannot reverse original transfer: source row is missing.' }); }
+
+                            db.run(`UPDATE daily_stocks SET stock_at_kpr = stock_at_kpr - ? WHERE id = ?`,
+                                [old.quantity, destRow.id], (u1Err) => {
+                                    if (u1Err) { db.run('ROLLBACK'); return res.status(500).json({ error: u1Err.message }); }
+                                    db.run(`UPDATE daily_stocks SET stock_at_kpr = stock_at_kpr + ? WHERE id = ?`,
+                                        [old.quantity, srcRow.id], (u2Err) => {
+                                            if (u2Err) { db.run('ROLLBACK'); return res.status(500).json({ error: u2Err.message }); }
+
+                                            // Step 2: apply new values
+                                            db.get(
+                                                `SELECT id, stock_at_kpr FROM daily_stocks
+                                                 WHERE stock_date = ? AND location = ? AND category = ? AND size = ?`,
+                                                [old.transfer_date, fromLocation, category, size],
+                                                (nSrcErr, nSrc) => {
+                                                    if (nSrcErr) { db.run('ROLLBACK'); return res.status(500).json({ error: nSrcErr.message }); }
+                                                    if (!nSrc) { db.run('ROLLBACK'); return res.status(400).json({ error: 'New source has no stock recorded today for this category and sub-category.' }); }
+                                                    if (Number(nSrc.stock_at_kpr) < quantity) { db.run('ROLLBACK'); return res.status(400).json({ error: `New source has only ${nSrc.stock_at_kpr} in stock.` }); }
+
+                                                    db.get(
+                                                        `SELECT id FROM daily_stocks WHERE stock_date = ? AND location = ? AND category = ? AND size = ?`,
+                                                        [old.transfer_date, toLocation, category, size],
+                                                        (nDstErr, nDst) => {
+                                                            if (nDstErr) { db.run('ROLLBACK'); return res.status(500).json({ error: nDstErr.message }); }
+
+                                                            const applyNew = (destId) => {
+                                                                db.run(`UPDATE daily_stocks SET stock_at_kpr = stock_at_kpr - ? WHERE id = ?`,
+                                                                    [quantity, nSrc.id], (a1Err) => {
+                                                                        if (a1Err) { db.run('ROLLBACK'); return res.status(500).json({ error: a1Err.message }); }
+                                                                        db.run(`UPDATE daily_stocks SET stock_at_kpr = stock_at_kpr + ? WHERE id = ?`,
+                                                                            [quantity, destId], (a2Err) => {
+                                                                                if (a2Err) { db.run('ROLLBACK'); return res.status(500).json({ error: a2Err.message }); }
+                                                                                db.run(
+                                                                                    `UPDATE stock_transfers SET
+                                                                                        category = ?, size = ?, from_location = ?, to_location = ?, quantity = ?, remarks = ?
+                                                                                     WHERE id = ?`,
+                                                                                    [category, size, fromLocation, toLocation, quantity, remarks, transferId],
+                                                                                    (upErr) => {
+                                                                                        if (upErr) { db.run('ROLLBACK'); return res.status(500).json({ error: upErr.message }); }
+                                                                                        db.run('COMMIT', (cErr) => {
+                                                                                            if (cErr) return res.status(500).json({ error: cErr.message });
+                                                                                            res.json({ ok: true });
+                                                                                        });
+                                                                                    }
+                                                                                );
+                                                                            });
+                                                                    });
+                                                            };
+
+                                                            if (nDst) return applyNew(nDst.id);
+
+                                                            db.run(
+                                                                `INSERT INTO daily_stocks (stock_date, location, category, size, qty_for_1_cabin, qty_for_20_cabin, stock_at_kpr)
+                                                                 VALUES (?, ?, ?, ?, 0, 0, 0)`,
+                                                                [old.transfer_date, toLocation, category, size],
+                                                                function (cErr) {
+                                                                    if (cErr) { db.run('ROLLBACK'); return res.status(500).json({ error: cErr.message }); }
+                                                                    applyNew(this.lastID);
+                                                                }
+                                                            );
+                                                        }
+                                                    );
+                                                }
+                                            );
+                                        });
+                                });
+                        }
+                    );
+                }
+            );
+        });
+    });
+});
+
+app.delete('/api/stock-transfers/:id', (req, res) => {
+    const transferId = Number(req.params.id);
+    if (!Number.isInteger(transferId) || transferId <= 0) return res.status(400).json({ error: 'Invalid transfer id.' });
+
+    db.serialize(() => {
+        db.run('BEGIN IMMEDIATE TRANSACTION');
+
+        db.get(`SELECT * FROM stock_transfers WHERE id = ?`, [transferId], (findErr, old) => {
+            if (findErr) { db.run('ROLLBACK'); return res.status(500).json({ error: findErr.message }); }
+            if (!old) { db.run('ROLLBACK'); return res.status(404).json({ error: 'Transfer not found.' }); }
+            if (old.transfer_date !== getTodayLocalISO()) { db.run('ROLLBACK'); return res.status(403).json({ error: "Only today's transfers can be deleted." }); }
+
+            db.get(
+                `SELECT id, stock_at_kpr FROM daily_stocks
+                 WHERE stock_date = ? AND location = ? AND category = ? AND size = ?`,
+                [old.transfer_date, old.to_location, old.category, old.size],
+                (destErr, destRow) => {
+                    if (destErr) { db.run('ROLLBACK'); return res.status(500).json({ error: destErr.message }); }
+                    if (!destRow || Number(destRow.stock_at_kpr) < Number(old.quantity)) {
+                        db.run('ROLLBACK');
+                        return res.status(400).json({ error: 'Cannot reverse transfer: destination has less stock than the transfer quantity.' });
+                    }
+
+                    db.get(
+                        `SELECT id FROM daily_stocks
+                         WHERE stock_date = ? AND location = ? AND category = ? AND size = ?`,
+                        [old.transfer_date, old.from_location, old.category, old.size],
+                        (srcErr, srcRow) => {
+                            if (srcErr) { db.run('ROLLBACK'); return res.status(500).json({ error: srcErr.message }); }
+                            if (!srcRow) { db.run('ROLLBACK'); return res.status(400).json({ error: 'Cannot reverse transfer: source row is missing.' }); }
+
+                            db.run(`UPDATE daily_stocks SET stock_at_kpr = stock_at_kpr - ? WHERE id = ?`,
+                                [old.quantity, destRow.id], (u1Err) => {
+                                    if (u1Err) { db.run('ROLLBACK'); return res.status(500).json({ error: u1Err.message }); }
+                                    db.run(`UPDATE daily_stocks SET stock_at_kpr = stock_at_kpr + ? WHERE id = ?`,
+                                        [old.quantity, srcRow.id], (u2Err) => {
+                                            if (u2Err) { db.run('ROLLBACK'); return res.status(500).json({ error: u2Err.message }); }
+                                            db.run(`DELETE FROM stock_transfers WHERE id = ?`, [transferId], (dErr) => {
+                                                if (dErr) { db.run('ROLLBACK'); return res.status(500).json({ error: dErr.message }); }
+                                                db.run('COMMIT', (cErr) => {
+                                                    if (cErr) return res.status(500).json({ error: cErr.message });
+                                                    res.json({ ok: true });
+                                                });
+                                            });
+                                        });
+                                });
+                        }
+                    );
+                }
+            );
+        });
+    });
+});
+
+/* ============================================================
+   API: SHARE WITH CA
+============================================================ */
+
+// Whitelisted document types the UI is allowed to send.
+const CA_ALLOWED_DOC_TYPES = new Set([
+    'GSTR1', 'GSTR2', 'INVOICES', 'RETURNS', 'LEDGER'
+]);
+
+// Build a CSV of the requested document types.
+// Returns { csv, rows } where rows is the raw data (for JSON/ZIP use).
+function buildCaDocumentData(docTypes, startDate, endDate, cb) {
+    // We fetch each dataset lazily and merge into one object.
+    const result = {
+        start: startDate,
+        end: endDate,
+        types: docTypes,
+        generatedAt: new Date().toISOString(),
+        data: {}
+    };
+
+    const tasks = [];
+
+    // ---- GSTR-1 style: Sales (transaction_type = 'Sale') ----
+    if (docTypes.includes('GSTR1')) {
+        tasks.push(new Promise((resolve, reject) => {
+            db.all(
+                `SELECT invoice_date, invoice_number, bill_to, item_name,
+                        quantity, hsn_code, rate, value_amount,
+                        cgst_percent, cgst_amount, sgst_percent, sgst_amount,
+                        igst_percent, igst_amount, amount, location
+                 FROM purchase_sales
+                 WHERE transaction_type = 'Sale'
+                   AND invoice_date >= ? AND invoice_date <= ?
+                 ORDER BY invoice_date ASC, id ASC`,
+                [startDate, endDate],
+                (err, rows) => err ? reject(err) : (result.data.GSTR1 = rows || [], resolve())
+            );
+        }));
+    }
+
+    // ---- GSTR-2 style: Purchases (transaction_type = 'Purchase') ----
+    if (docTypes.includes('GSTR2')) {
+        tasks.push(new Promise((resolve, reject) => {
+            db.all(
+                `SELECT invoice_date, invoice_number, bill_to, item_name,
+                        quantity, hsn_code, rate, value_amount,
+                        cgst_percent, cgst_amount, sgst_percent, sgst_amount,
+                        igst_percent, igst_amount, amount, location
+                 FROM purchase_sales
+                 WHERE transaction_type = 'Purchase'
+                   AND invoice_date >= ? AND invoice_date <= ?
+                 ORDER BY invoice_date ASC, id ASC`,
+                [startDate, endDate],
+                (err, rows) => err ? reject(err) : (result.data.GSTR2 = rows || [], resolve())
+            );
+        }));
+    }
+
+    // ---- Sales invoices (same as GSTR1 but distinct label for the UI) ----
+    if (docTypes.includes('INVOICES')) {
+        tasks.push(new Promise((resolve, reject) => {
+            db.all(
+                `SELECT invoice_date, invoice_number, bill_to, ship_to,
+                        item_name, quantity, hsn_code, rate, value_amount,
+                        cgst_amount, sgst_amount, igst_amount, amount,
+                        delivery, dc_number, ewaybill, location
+                 FROM purchase_sales
+                 WHERE transaction_type = 'Sale'
+                   AND invoice_date >= ? AND invoice_date <= ?
+                 ORDER BY invoice_date ASC, id ASC`,
+                [startDate, endDate],
+                (err, rows) => err ? reject(err) : (result.data.INVOICES = rows || [], resolve())
+            );
+        }));
+    }
+
+    // ---- Credit / Debit notes: placeholders (your DB has no separate table yet) ----
+    if (docTypes.includes('RETURNS')) {
+        result.data.RETURNS = [];  // ready for when a returns table is added
+    }
+
+    // ---- Customer ledgers: aggregate Sale minus received per party ----
+    if (docTypes.includes('LEDGER')) {
+        tasks.push(new Promise((resolve, reject) => {
+            db.all(
+                `SELECT bill_to AS party,
+                        COALESCE(SUM(CASE WHEN transaction_type = 'Sale' THEN amount ELSE 0 END), 0) AS total_sale,
+                        COALESCE(SUM(CASE WHEN transaction_type = 'Purchase' THEN amount ELSE 0 END), 0) AS total_purchase
+                 FROM purchase_sales
+                 WHERE invoice_date >= ? AND invoice_date <= ?
+                 GROUP BY bill_to
+                 ORDER BY bill_to COLLATE NOCASE ASC`,
+                [startDate, endDate],
+                (err, rows) => err ? reject(err) : (result.data.LEDGER = rows || [], resolve())
+            );
+        }));
+    }
+
+    Promise.all(tasks)
+        .then(() => cb(null, result))
+        .catch((err) => cb(err));
+}
+
+// Convert the fetched CA data object into a flat CSV string (single file).
+function buildCaCsv(caData) {
+    const lines = [];
+    const push = (s) => lines.push(s);
+
+    push(`InventorySystem2 — CA Share Package`);
+    push(`Period,${caData.start},${caData.end}`);
+    push(`Generated At,${caData.generatedAt}`);
+    push(`Document Types,${caData.types.join('|')}`);
+    push('');
+
+    Object.keys(caData.data).forEach((key) => {
+        const rows = caData.data[key];
+        push(`# ===== ${key} (${rows.length} rows) =====`);
+        if (!rows.length) {
+            push('(no rows)');
+            push('');
+            return;
+        }
+        const headers = Object.keys(rows[0]);
+        push(headers.join(','));
+        rows.forEach((row) => {
+            push(headers.map((h) => {
+                const v = row[h];
+                if (v === null || v === undefined) return '';
+                const s = String(v).replace(/"/g, '""');
+                return /[",\n]/.test(s) ? `"${s}"` : s;
+            }).join(','));
+        });
+        push('');
+    });
+
+    return lines.join('\n');
+}
+
+// Helper: read JSON body list of document types into a validated array.
+function readCaDocTypes(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw
+        .map((v) => String(v || '').trim().toUpperCase())
+        .filter((v) => CA_ALLOWED_DOC_TYPES.has(v));
+}
+
+// Helper: insert a ca_share_logs row.
+function logCaShare({ businessId = 1, caContactId = null, shareType, start, end, docTypes, status, errorMessage = null }, cb) {
+    db.run(
+        `INSERT INTO ca_share_logs
+            (business_id, ca_contact_id, share_type, date_start, date_end,
+             document_types, status, error_message)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [businessId, caContactId, shareType, start, end, JSON.stringify(docTypes), status, errorMessage],
+        function (err) {
+            if (cb) cb(err, this ? this.lastID : null);
+        }
+    );
+}
+
+/* ---------- GET /api/ca/config ---------- */
+app.get('/api/ca/config', requireAuth, (req, res) => {
+    db.get(
+        `SELECT id, ca_name, ca_email, ca_phone, ca_firm_reg, auto_share_reminder, updated_at
+         FROM ca_contacts WHERE business_id = 1`,
+        [],
+        (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!row) return res.json(null);
+
+            res.json({
+                id: row.id,
+                caName: row.ca_name,
+                caEmail: row.ca_email || '',
+                caPhone: row.ca_phone || '',
+                caFirm: row.ca_firm_reg || '',
+                autoShareReminder: !!row.auto_share_reminder,
+                updatedAt: row.updated_at
+            });
+        }
+    );
+});
+
+/* ---------- POST /api/ca/config ---------- */
+app.post('/api/ca/config', requireAuth, (req, res) => {
+    const b = req.body || {};
+    const caName = String(b.caName || '').trim();
+    const caEmail = String(b.caEmail || '').trim();
+    const caPhone = String(b.caPhone || '').trim();
+    const caFirm = String(b.caFirm || '').trim();
+    const autoShare = b.autoShareReminder ? 1 : 0;
+
+    if (!caName) return res.status(400).json({ error: 'CA Name is required.' });
+    if (caEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(caEmail)) {
+        return res.status(400).json({ error: 'CA Email is not a valid email address.' });
+    }
+
+    db.get(`SELECT id FROM ca_contacts WHERE business_id = 1`, [], (findErr, existing) => {
+        if (findErr) return res.status(500).json({ error: findErr.message });
+
+        if (existing) {
+            db.run(
+                `UPDATE ca_contacts
+                 SET ca_name = ?, ca_email = ?, ca_phone = ?, ca_firm_reg = ?,
+                     auto_share_reminder = ?, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ?`,
+                [caName, caEmail, caPhone, caFirm, autoShare, existing.id],
+                function (upErr) {
+                    if (upErr) return res.status(500).json({ error: upErr.message });
+                    res.json({ ok: true, id: existing.id, action: 'updated' });
+                }
+            );
+            return;
+        }
+
+        db.run(
+            `INSERT INTO ca_contacts
+                (business_id, ca_name, ca_email, ca_phone, ca_firm_reg, auto_share_reminder)
+             VALUES (1, ?, ?, ?, ?, ?)`,
+            [caName, caEmail, caPhone, caFirm, autoShare],
+            function (insErr) {
+                if (insErr) return res.status(500).json({ error: insErr.message });
+                res.json({ ok: true, id: this.lastID, action: 'inserted' });
+            }
+        );
+    });
+});
+
+/* ---------- POST /api/ca/share/email ---------- */
+app.post('/api/ca/share/email', requireAuth, (req, res) => {
+    const b = req.body || {};
+    const start = String(b.start || '').trim();
+    const end = String(b.end || '').trim();
+    const docTypes = readCaDocTypes(b.docs);
+    const caEmail = String(b.caEmail || '').trim();
+    const caName = String(b.caName || '').trim();
+
+    if (!isValidDateString(start) || !isValidDateString(end)) {
+        return res.status(400).json({ error: 'Invalid date range.' });
+    }
+    if (start > end) return res.status(400).json({ error: 'Start date must be before end date.' });
+    if (!docTypes.length) return res.status(400).json({ error: 'Select at least one document type.' });
+    if (!caEmail) return res.status(400).json({ error: 'CA Email is required.' });
+
+    buildCaDocumentData(docTypes, start, end, (err, caData) => {
+        if (err) {
+            logCaShare({ shareType: 'email', start, end, docTypes, status: 'failed', errorMessage: err.message });
+            return res.status(500).json({ error: err.message });
+        }
+
+        const csv = buildCaCsv(caData);
+
+        // --- Replace this block with your real email sender (nodemailer, SES, etc.) ---
+        // For now, we log and return success so the UI flow is fully testable.
+        console.log(`📧 [CA SHARE] Would email ${caEmail} (${caName || 'CA'}) — ${docTypes.length} docs, ${csv.length} bytes CSV`);
+
+        logCaShare({
+            shareType: 'email',
+            start, end, docTypes,
+            status: 'sent'
+        }, (logErr) => {
+            if (logErr) console.error('[ca_share_logs] email', logErr.message);
+            res.json({
+                ok: true,
+                to: caEmail,
+                documents: docTypes,
+                sizeBytes: csv.length,
+                message: 'Package prepared. Wire up your SMTP provider in the marked block to actually send.'
+            });
+        });
+    });
+});
+
+/* ---------- POST /api/ca/share/whatsapp ---------- */
+app.post('/api/ca/share/whatsapp', requireAuth, (req, res) => {
+    const b = req.body || {};
+    const start = String(b.start || '').trim();
+    const end = String(b.end || '').trim();
+    const docTypes = readCaDocTypes(b.docs);
+    const caPhone = String(b.caPhone || '').replace(/\D/g, '');
+    const caName = String(b.caName || '').trim();
+
+    if (!isValidDateString(start) || !isValidDateString(end)) {
+        return res.status(400).json({ error: 'Invalid date range.' });
+    }
+    if (start > end) return res.status(400).json({ error: 'Start date must be before end date.' });
+    if (!docTypes.length) return res.status(400).json({ error: 'Select at least one document type.' });
+    if (caPhone.length < 10) return res.status(400).json({ error: 'CA WhatsApp number is required (10 digits min).' });
+
+    // wa.me deep link — user clicks and WhatsApp opens with a pre-filled message.
+    // In a production setup you'd host the ZIP somewhere and include the link.
+    const message = encodeURIComponent(
+        `Hello ${caName || 'CA'}, please find the requested reports for ${start} to ${end}. ` +
+        `Documents included: ${docTypes.join(', ')}. — Sent from InventorySystem2`
+    );
+    const phoneWithCountry = caPhone.length === 10 ? `91${caPhone}` : caPhone;
+    const link = `https://wa.me/${phoneWithCountry}?text=${message}`;
+
+    logCaShare({
+        shareType: 'whatsapp',
+        start, end, docTypes,
+        status: 'sent'
+    }, (logErr) => {
+        if (logErr) console.error('[ca_share_logs] whatsapp', logErr.message);
+        res.json({ ok: true, link, phone: phoneWithCountry, documents: docTypes });
+    });
+});
+
+/* ---------- POST /api/ca/share/zip ---------- */
+app.post('/api/ca/share/zip', requireAuth, (req, res) => {
+    const b = req.body || {};
+    const start = String(b.start || '').trim();
+    const end = String(b.end || '').trim();
+    const allowedReports = {
+        SALE: {
+            transactionType: 'Sale',
+            filename: 'Sale_Report.csv',
+            columns: ['invoice_date', 'invoice_number', 'bill_to', 'ship_to', 'item_name', 'quantity', 'hsn_code', 'rate', 'value_amount', 'amount', 'delivery', 'dc_number', 'ewaybill', 'location']
+        },
+        PURCHASE: {
+            transactionType: 'Purchase',
+            filename: 'Purchase_Report.csv',
+            columns: ['invoice_date', 'invoice_number', 'bill_to', 'ship_to', 'item_name', 'quantity', 'hsn_code', 'rate', 'value_amount', 'amount', 'delivery', 'dc_number', 'ewaybill', 'location']
+        },
+        SALE_GST: {
+            transactionType: 'Sale',
+            filename: 'Sale_Report_with_GST.csv',
+            columns: ['invoice_date', 'invoice_number', 'bill_to', 'ship_to', 'item_name', 'quantity', 'hsn_code', 'rate', 'value_amount', 'cgst_percent', 'cgst_amount', 'sgst_percent', 'sgst_amount', 'igst_percent', 'igst_amount', 'amount', 'location']
+        },
+        PURCHASE_GST: {
+            transactionType: 'Purchase',
+            filename: 'Purchase_Report_with_GST.csv',
+            columns: ['invoice_date', 'invoice_number', 'bill_to', 'ship_to', 'item_name', 'quantity', 'hsn_code', 'rate', 'value_amount', 'cgst_percent', 'cgst_amount', 'sgst_percent', 'sgst_amount', 'igst_percent', 'igst_amount', 'amount', 'location']
+        }
+    };
+    const docTypes = Array.isArray(b.docs)
+        ? [...new Set(b.docs.map((value) => String(value || '').trim().toUpperCase()))]
+            .filter((value) => Object.prototype.hasOwnProperty.call(allowedReports, value))
+        : [];
+    const locations = Array.isArray(b.locations)
+        ? [...new Set(b.locations.map(normalizeLocationName).filter(isSupportedLocation))]
+        : [];
+
+    if (!isValidDateString(start) || !isValidDateString(end)) {
+        return res.status(400).json({ error: 'Invalid date range.' });
+    }
+    if (start > end) return res.status(400).json({ error: 'Start date must be before end date.' });
+    if (!docTypes.length) return res.status(400).json({ error: 'Select at least one report.' });
+    if (!locations.length) return res.status(400).json({ error: 'Select at least one valid location.' });
+
+    const selectedReports = docTypes.map((type) => allowedReports[type]);
+    const transactionTypes = [...new Set(selectedReports.map((report) => report.transactionType))];
+    const locationPlaceholders = locations.map(() => '?').join(', ');
+    const reportColumns = [...new Set(selectedReports.flatMap((report) => report.columns))];
+    const columnsSql = reportColumns.map((column) => `"${column}"`).join(', ');
+    const queryTasks = transactionTypes.map((transactionType) => new Promise((resolve, reject) => {
+        db.all(
+            `SELECT ${columnsSql} FROM purchase_sales
+             WHERE transaction_type = ? AND invoice_date >= ? AND invoice_date <= ?
+                    AND LOWER(location) IN (${locationPlaceholders})
+             ORDER BY invoice_date ASC, id ASC`,
+                [transactionType, start, end, ...locations.map((location) => location.toLowerCase())],
+            (err, rows) => err ? reject(err) : resolve([transactionType, rows || []])
+        );
+    }));
+
+    Promise.all(queryTasks).then((resultSets) => {
+        const rowsByType = Object.fromEntries(resultSets);
+        const csvCell = (value) => {
+            const text = value == null ? '' : String(value);
+            return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+        };
+        const archive = archiver('zip', { zlib: { level: 9 } });
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', `attachment; filename="CA_Reports_${start}_to_${end}.zip"`);
+        archive.on('error', (err) => {
+            console.error('[ca_share] ZIP creation failed', err);
+            if (!res.headersSent) res.status(500).json({ error: 'Unable to create report ZIP.' });
+            else res.destroy(err);
+        });
+        archive.pipe(res);
+
+        selectedReports.forEach((report) => {
+            const rows = rowsByType[report.transactionType] || [];
+            const csv = [report.columns.join(','), ...rows.map((row) => report.columns.map((column) => csvCell(row[column])).join(','))].join('\r\n');
+            archive.append(`\uFEFF${csv}`, { name: report.filename });
+        });
+        archive.finalize();
+
+        res.on('finish', () => {
+            logCaShare({ shareType: 'zip', start, end, docTypes, status: 'sent' }, (logErr) => {
+                if (logErr) console.error('[ca_share_logs] zip', logErr.message);
+            });
+        });
+    }).catch((err) => {
+        console.error('[ca_share] report query failed', err);
+        logCaShare({ shareType: 'zip', start, end, docTypes, status: 'failed', errorMessage: err.message });
+        if (!res.headersSent) res.status(500).json({ error: 'Unable to load report data.' });
+    });
+});
+
+/* ============================================================
+   API: SETTINGS — BACKUP & RESTORE
+============================================================ */
+
+const DB_PATH          = path.join(__dirname, 'database.sqlite');
+const AUTO_BACKUP_DIR  = path.join(__dirname, 'auto-backups');
+const BACKUP_CONFIG    = path.join(__dirname, 'backup-config.json');
+
+// Ensure the auto-backup folder exists
+if (!fs.existsSync(AUTO_BACKUP_DIR)) fs.mkdirSync(AUTO_BACKUP_DIR, { recursive: true });
+
+// In-memory scheduler handle
+let autoBackupTimer = null;
+
+/* ---------- Config helpers ---------- */
+function readBackupConfig() {
+  try {
+    if (!fs.existsSync(BACKUP_CONFIG)) return null;
+    const raw = fs.readFileSync(BACKUP_CONFIG, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch (_e) { return null; }
+}
+function writeBackupConfig(cfg) {
+  try {
+    fs.writeFileSync(BACKUP_CONFIG, JSON.stringify(cfg, null, 2), 'utf8');
+  } catch (e) {
+    console.error('[backup] writeBackupConfig failed:', e.message);
+  }
+}
+
+/* ---------- Timestamp helper ---------- */
+function backupStamp(d = new Date()) {
+  const pad = (v) => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+}
+
+/* ---------- Safe DB copy (SQLite) ---------- */
+function copyDbTo(targetPath) {
+  // fs.copyFileSync is safe for SQLite when no write transaction is in flight.
+  // For extra safety we run a quick WAL checkpoint first.
+  return new Promise((resolve, reject) => {
+    try {
+      db.run('PRAGMA wal_checkpoint(FULL);', (err) => {
+        if (err) { /* non-fatal — continue */ }
+        try {
+          fs.copyFileSync(DB_PATH, targetPath);
+          // Also copy the WAL/SHM files if they exist, so the copy is consistent.
+          const wal = `${DB_PATH}-wal`;
+          const shm = `${DB_PATH}-shm`;
+          if (fs.existsSync(wal)) try { fs.copyFileSync(wal, `${targetPath}-wal`); } catch (_e) {}
+          if (fs.existsSync(shm)) try { fs.copyFileSync(shm, `${targetPath}-shm`); } catch (_e) {}
+          resolve();
+        } catch (copyErr) {
+          reject(copyErr);
+        }
+      });
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+/* ---------- Prune old auto backups ---------- */
+function pruneAutoBackups(folder, keep) {
+  try {
+    if (!fs.existsSync(folder)) return;
+    const files = fs.readdirSync(folder)
+      .filter((f) => /^inventorysystem2_auto_.*\.sqlite$/i.test(f))
+      .map((f) => ({ name: f, path: path.join(folder, f), mtime: fs.statSync(path.join(folder, f)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime); // newest first
+    const excess = files.slice(keep);
+    excess.forEach((f) => {
+      try { fs.unlinkSync(f.path); } catch (_e) {}
+      try { fs.unlinkSync(`${f.path}-wal`); } catch (_e) {}
+      try { fs.unlinkSync(`${f.path}-shm`); } catch (_e) {}
+    });
+  } catch (e) {
+    console.error('[backup] pruneAutoBackups failed:', e.message);
+  }
+}
+
+/* ---------- Run auto backup ---------- */
+async function runAutoBackup(reason = 'manual') {
+  const cfg = readBackupConfig() || {};
+  if (reason !== 'manual' && !cfg.enabled) return { skipped: true };
+
+  const folder = (cfg.folder && String(cfg.folder).trim()) || AUTO_BACKUP_DIR;
+  try {
+    if (!fs.existsSync(folder)) {
+      fs.mkdirSync(folder, { recursive: true });
+    }
+  } catch (e) {
+    throw new Error(`Cannot create backup folder: ${e.message}`);
+  }
+
+  const filename = `inventorysystem2_auto_${backupStamp()}.sqlite`;
+  const target = path.join(folder, filename);
+  await copyDbTo(target);
+
+  // Update lastSaved timestamp in config
+  const nextCfg = { ...cfg, lastSaved: new Date().toISOString() };
+  writeBackupConfig(nextCfg);
+
+  // Enforce the keep limit
+  const keep = Math.max(1, Math.min(100, Number(cfg.keep) || 7));
+  pruneAutoBackups(folder, keep);
+
+  return { ok: true, file: target, lastSaved: nextCfg.lastSaved };
+}
+
+/* ---------- Scheduler ---------- */
+function scheduleAutoBackup() {
+  if (autoBackupTimer) { clearTimeout(autoBackupTimer); autoBackupTimer = null; }
+
+  const cfg = readBackupConfig();
+  if (!cfg || !cfg.enabled) return;
+
+  const freq = String(cfg.frequency || 'daily');
+  const [hh, mm] = String(cfg.time || '23:00').split(':').map((v) => parseInt(v, 10) || 0);
+
+  function nextDelayMs() {
+    const now = new Date();
+    if (freq === 'hourly') {
+      const next = new Date(now);
+      next.setMinutes(mm, 0, 0);
+      if (next <= now) next.setHours(next.getHours() + 1);
+      return next - now;
+    }
+    if (freq === 'every6hours' || freq === 'every12hours') {
+      const stepHours = freq === 'every6hours' ? 6 : 12;
+      // Run at the given minute, every stepHours starting at hour 0
+      const next = new Date(now);
+      next.setMinutes(mm, 0, 0);
+      next.setHours(Math.ceil(now.getHours() / stepHours) * stepHours);
+      if (next <= now) next.setHours(next.getHours() + stepHours);
+      return next - now;
+    }
+    // Default: daily at hh:mm
+    const next = new Date(now);
+    next.setHours(hh, mm, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    return next - now;
+  }
+
+  const delay = Math.max(1000, nextDelayMs());
+  autoBackupTimer = setTimeout(async () => {
+    try {
+      await runAutoBackup('scheduled');
+      console.log('[backup] scheduled backup completed');
+    } catch (e) {
+      console.error('[backup] scheduled backup failed:', e.message);
+    } finally {
+      scheduleAutoBackup(); // re-arm
+    }
+  }, delay);
+
+  console.log(`[backup] next auto backup in ${Math.round(delay / 1000)}s (${freq} @ ${cfg.time})`);
+}
+
+// Start the scheduler on boot (if config exists and is enabled)
+setTimeout(() => { try { scheduleAutoBackup(); } catch (_e) {} }, 500);
+
+/* ---------- GET /api/backup/download ---------- */
+app.get('/api/backup/download', requireAuth, async (req, res) => {
+  try {
+    // Copy to a temp file so the download is consistent even if writes happen
+    const tmp = path.join(__dirname, `tmp-backup-${Date.now()}.sqlite`);
+    await copyDbTo(tmp);
+    const filename = `inventorysystem2-backup-${backupStamp()}.sqlite`;
+
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    const stream = fs.createReadStream(tmp);
+    stream.on('error', (err) => {
+      console.error('[backup] download stream error:', err.message);
+      try { fs.unlinkSync(tmp); } catch (_e) {}
+      if (!res.headersSent) res.status(500).end();
+    });
+    stream.on('close', () => {
+      try { fs.unlinkSync(tmp); } catch (_e) {}
+      try { fs.unlinkSync(`${tmp}-wal`); } catch (_e) {}
+      try { fs.unlinkSync(`${tmp}-shm`); } catch (_e) {}
+    });
+    stream.pipe(res);
+  } catch (err) {
+    console.error('[backup] download failed:', err.message);
+    res.status(500).json({ error: `Unable to prepare backup: ${err.message}` });
+  }
+});
+
+/* ---------- GET /api/backup/auto-config ---------- */
+app.get('/api/backup/auto-config', requireAuth, (req, res) => {
+  const cfg = readBackupConfig() || {
+    enabled: false,
+    folder: '',
+    frequency: 'daily',
+    time: '23:00',
+    keep: 7,
+    lastSaved: null
+  };
+  res.json({
+    enabled:   !!cfg.enabled,
+    folder:    cfg.folder || '',
+    frequency: cfg.frequency || 'daily',
+    time:      cfg.time || '23:00',
+    keep:      Number(cfg.keep) || 7,
+    lastSaved: cfg.lastSaved || null
+  });
+});
+
+/* ---------- POST /api/backup/auto-config ---------- */
+app.post('/api/backup/auto-config', requireAuth, (req, res) => {
+  const b = req.body || {};
+  const prev = readBackupConfig() || {};
+  const next = {
+    ...prev,
+    enabled:   !!b.enabled,
+    folder:    String(b.folder || '').trim(),
+    frequency: String(b.frequency || 'daily'),
+    time:      String(b.time || '23:00'),
+    keep:      Math.max(1, Math.min(100, Number(b.keep) || 7)),
+    lastSaved: prev.lastSaved || null
+  };
+  writeBackupConfig(next);
+  // Re-arm the scheduler with the new settings
+  scheduleAutoBackup();
+  res.json({ ok: true, config: next });
+});
+
+/* ---------- POST /api/backup/auto-now ---------- */
+app.post('/api/backup/auto-now', requireAuth, async (req, res) => {
+  try {
+    const result = await runAutoBackup('manual');
+    res.json({
+      ok: true,
+      file: result.file,
+      lastSaved: result.lastSaved,
+      message: 'Backup saved to folder.'
+    });
+  } catch (err) {
+    console.error('[backup] manual failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ---------- POST /api/backup/restore ---------- */
+app.post('/api/backup/restore', requireAuth, restoreUpload.single('backup'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No backup file uploaded.' });
+
+  const uploadedPath = req.file.path;
+
+  // Sanity-check the uploaded file is a valid SQLite database.
+  // SQLite files start with the 16-byte magic string "SQLite format 3\0".
+  try {
+    const fd = fs.openSync(uploadedPath, 'r');
+    const header = Buffer.alloc(16);
+    fs.readSync(fd, header, 0, 16, 0);
+    fs.closeSync(fd);
+    const magic = header.toString('utf8');
+    if (!magic.startsWith('SQLite format 3')) {
+      try { fs.unlinkSync(uploadedPath); } catch (_e) {}
+      return res.status(400).json({ error: 'Uploaded file is not a valid SQLite database.' });
+    }
+  } catch (e) {
+    try { fs.unlinkSync(uploadedPath); } catch (_e) {}
+    return res.status(400).json({ error: `Unable to inspect uploaded file: ${e.message}` });
+  }
+
+  // Take a safety snapshot of the current DB before overwriting.
+  const safetyPath = path.join(__dirname, `pre-restore-safety-${backupStamp()}.sqlite`);
+  try {
+    await copyDbTo(safetyPath);
+  } catch (e) {
+    try { fs.unlinkSync(uploadedPath); } catch (_e) {}
+    return res.status(500).json({ error: `Unable to create safety snapshot: ${e.message}` });
+  }
+
+  // Close current DB, replace, and reopen.
+  db.close((closeErr) => {
+    if (closeErr) {
+      console.error('[backup] db.close failed:', closeErr.message);
+    }
+
+    try {
+      // Replace main DB file
+      fs.copyFileSync(uploadedPath, DB_PATH);
+      // Remove stale WAL/SHM from the old DB so the new file is used cleanly
+      try { fs.unlinkSync(`${DB_PATH}-wal`); } catch (_e) {}
+      try { fs.unlinkSync(`${DB_PATH}-shm`); } catch (_e) {}
+
+      // Clean up the uploaded temp file
+      try { fs.unlinkSync(uploadedPath); } catch (_e) {}
+
+      // Reopen the DB (the module-level `db` is const, so we re-point the global
+      // by requiring a fresh instance — for simplicity we just reopen in place.)
+      // Note: sqlite3 Database#open is available; we use it to reopen the same handle.
+      db = new sqlite3.Database(DB_PATH, (openErr) => {
+        if (openErr) {
+          console.error('[backup] db reopen failed:', openErr.message);
+          return res.status(500).json({ error: `Restore succeeded but DB reopen failed: ${openErr.message}. Restart the server.` });
+        }
+        console.log('[backup] DB restored and reopened.');
+        res.json({
+          ok: true,
+          message: 'Restore complete. Reloading…',
+          safetySnapshot: safetyPath
+        });
+      });
+    } catch (err) {
+      console.error('[backup] restore failed:', err.message);
+      // Try to reopen the original DB so the app keeps working
+      try {
+        db = new sqlite3.Database(DB_PATH, () => {});
+      } catch (_e) {}
+      res.status(500).json({ error: `Restore failed: ${err.message}` });
+    }
+  });
+});
+
+/* ============================================================
    FALLBACK — SPA
 ============================================================ */
 app.get('/*splat', (req, res) => {
@@ -1556,6 +2820,290 @@ app.get('/api/dashboard-summary', (req, res) => {
             );
         });
     });
+});
+
+/* =========================================================
+   Dashboard — Business Overview trend (current month)
+   GET /api/dashboard-trend?location=...
+   Returns: [{ date, sale, purchase }, ...]
+   ========================================================= */
+app.get('/api/dashboard-trend', (req, res) => {
+    try {
+        const location = req.query.location && String(req.query.location).trim()
+            ? String(req.query.location).trim().toLowerCase()
+            : '';
+
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = now.getMonth();
+        const pad = (v) => String(v).padStart(2, '0');
+        const startISO = `${y}-${pad(m + 1)}-01`;
+        const tomorrow = new Date(y, m, now.getDate() + 1);
+        const endISO = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`;
+
+        const where = [`invoice_date >= ?`, `invoice_date < ?`];
+        const params = [startISO, endISO];
+        if (location) {
+            where.push('LOWER(location) = ?');
+            params.push(location);
+        }
+
+        const sql = `
+            SELECT
+                invoice_date AS date,
+                COALESCE(SUM(CASE WHEN transaction_type = 'Sale'     THEN amount ELSE 0 END), 0) AS sale,
+                COALESCE(SUM(CASE WHEN transaction_type = 'Purchase' THEN amount ELSE 0 END), 0) AS purchase
+            FROM purchase_sales
+            WHERE ${where.join(' AND ')}
+            GROUP BY invoice_date
+            ORDER BY invoice_date ASC
+        `;
+
+        db.all(sql, params, (err, rows) => {
+            if (err) {
+                console.error('[dashboard-trend]', err);
+                return res.status(500).json({ error: err.message });
+            }
+            res.json(rows || []);
+        });
+    } catch (err) {
+        console.error('[dashboard-trend]', err);
+        res.status(500).json({ error: 'Failed to load trend data' });
+    }
+});
+
+/* =========================================================
+   Dashboard — Top Selling Products (current month, Sale only)
+   GET /api/top-selling?location=...
+   Returns: [{ item_name, amount }, ...]
+   ========================================================= */
+app.get('/api/top-selling', (req, res) => {
+    try {
+        const location = req.query.location && String(req.query.location).trim()
+            ? String(req.query.location).trim().toLowerCase()
+            : '';
+
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = now.getMonth();
+        const pad = (v) => String(v).padStart(2, '0');
+        const startISO = `${y}-${pad(m + 1)}-01`;
+        const nextMonth = new Date(y, m + 1, 1);
+        const endISO = `${nextMonth.getFullYear()}-${pad(nextMonth.getMonth() + 1)}-01`;
+
+        const where = [`transaction_type = 'Sale'`, `invoice_date >= ?`, `invoice_date < ?`];
+        const params = [startISO, endISO];
+        if (location) {
+            where.push('LOWER(location) = ?');
+            params.push(location);
+        }
+
+        const sql = `
+            SELECT item_name, COALESCE(SUM(amount), 0) AS amount
+            FROM purchase_sales
+            WHERE ${where.join(' AND ')}
+            GROUP BY item_name
+            ORDER BY amount DESC
+            LIMIT 5
+        `;
+
+        db.all(sql, params, (err, rows) => {
+            if (err) {
+                console.error('[top-selling]', err);
+                return res.status(500).json({ error: err.message });
+            }
+            res.json(rows || []);
+        });
+    } catch (err) {
+        console.error('[top-selling]', err);
+        res.status(500).json({ error: 'Failed to load top selling data' });
+    }
+});
+
+/* =========================================================
+   Dashboard — Low Stock Alerts (today's data, < 15)
+   GET /api/dashboard-low-stock?location=...
+   Returns: [{ size, category, location, stock_at_kpr }, ...]
+   ========================================================= */
+app.get('/api/dashboard-low-stock', (req, res) => {
+    try {
+        const location = req.query.location && String(req.query.location).trim()
+            ? String(req.query.location).trim()
+            : '';
+        const today = getTodayLocalISO();
+        const THRESHOLD = 15;
+
+        const where = [`stock_date = ?`, `stock_at_kpr < ?`];
+        const params = [today, THRESHOLD];
+        if (location) {
+            where.push('LOWER(location) = ?');
+            params.push(location.toLowerCase());
+        }
+
+        const sql = `
+            SELECT id, size, category, location, stock_at_kpr
+            FROM daily_stocks
+            WHERE ${where.join(' AND ')}
+            ORDER BY stock_at_kpr ASC, size COLLATE NOCASE ASC
+            LIMIT 4
+        `;
+
+        db.all(sql, params, (err, rows) => {
+            if (err) {
+                console.error('[dashboard-low-stock]', err);
+                return res.status(500).json({ error: err.message });
+            }
+            res.json(rows || []);
+        });
+    } catch (err) {
+        console.error('[dashboard-low-stock]', err);
+        res.status(500).json({ error: 'Failed to load low stock data' });
+    }
+});
+
+/* =========================================================
+   Dashboard — Monthly stats (current month)
+   GET /api/dashboard-monthly-stats?location=...
+   Returns: { total_sale, outstanding, total_purchase, balance_payable }
+   ========================================================= */
+app.get('/api/dashboard-monthly-stats', (req, res) => {
+    try {
+        const location = req.query.location && String(req.query.location).trim()
+            ? String(req.query.location).trim().toLowerCase()
+            : '';
+
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = now.getMonth();
+        const pad = (v) => String(v).padStart(2, '0');
+        const startISO = `${y}-${pad(m + 1)}-01`;
+        const nextMonth = new Date(y, m + 1, 1);
+        const endISO = `${nextMonth.getFullYear()}-${pad(nextMonth.getMonth() + 1)}-01`;
+
+        // --- Sale / Purchase for current month ---
+        const psWhere = [`invoice_date >= ?`, `invoice_date < ?`];
+        const psParams = [startISO, endISO];
+        if (location) {
+            psWhere.push('LOWER(location) = ?');
+            psParams.push(location);
+        }
+
+        const psSql = `
+            SELECT
+                COALESCE(SUM(CASE WHEN transaction_type = 'Sale'     THEN amount ELSE 0 END), 0) AS total_sale,
+                COALESCE(SUM(CASE WHEN transaction_type = 'Purchase' THEN amount ELSE 0 END), 0) AS total_purchase
+            FROM purchase_sales
+            WHERE ${psWhere.join(' AND ')}
+        `;
+
+        db.get(psSql, psParams, (err, row) => {
+            if (err) {
+                console.error('[dashboard-monthly-stats]', err);
+                return res.status(500).json({ error: err.message });
+            }
+            const totalSale = Number(row && row.total_sale) || 0;
+            const totalPurchase = Number(row && row.total_purchase) || 0;
+
+            // --- Contractor balance payable (all-time, filtered by location via work entries) ---
+            const conWhere = ['1=1'];
+            const conParams = [];
+            if (location) {
+                conWhere.push('LOWER(e.location) = ?');
+                conParams.push(location);
+            }
+
+            // Total contractor work value (based on entries + rate cards)
+            const balanceSql = `
+                SELECT
+                    COALESCE(SUM(
+                        e.fabrication  * COALESCE((SELECT rc.fabrication FROM contractor_rate_cards rc
+                            WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
+                            ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
+                            (SELECT rc.fabrication FROM contractor_rate_cards rc
+                            WHERE rc.contractor_id = e.contractor_id
+                            ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 100)
+                        + e.cement_sheet * COALESCE((SELECT rc.cement_sheet FROM contractor_rate_cards rc
+                            WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
+                            ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
+                            (SELECT rc.cement_sheet FROM contractor_rate_cards rc
+                            WHERE rc.contractor_id = e.contractor_id
+                            ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 150)
+                        + e.electrical   * COALESCE((SELECT rc.electrical FROM contractor_rate_cards rc
+                            WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
+                            ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
+                            (SELECT rc.electrical FROM contractor_rate_cards rc
+                            WHERE rc.contractor_id = e.contractor_id
+                            ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 200)
+                        + e.tiles        * COALESCE((SELECT rc.tiles FROM contractor_rate_cards rc
+                            WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
+                            ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
+                            (SELECT rc.tiles FROM contractor_rate_cards rc
+                            WHERE rc.contractor_id = e.contractor_id
+                            ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 120)
+                        + e.plumbing     * COALESCE((SELECT rc.plumbing FROM contractor_rate_cards rc
+                            WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
+                            ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
+                            (SELECT rc.plumbing FROM contractor_rate_cards rc
+                            WHERE rc.contractor_id = e.contractor_id
+                            ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 130)
+                        + e.door_fitting * COALESCE((SELECT rc.door_fitting FROM contractor_rate_cards rc
+                            WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
+                            ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
+                            (SELECT rc.door_fitting FROM contractor_rate_cards rc
+                            WHERE rc.contractor_id = e.contractor_id
+                            ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 250)
+                        + e.outer_colour * COALESCE((SELECT rc.outer_colour FROM contractor_rate_cards rc
+                            WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
+                            ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
+                            (SELECT rc.outer_colour FROM contractor_rate_cards rc
+                            WHERE rc.contractor_id = e.contractor_id
+                            ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 80)
+                        + e.inner_colour * COALESCE((SELECT rc.inner_colour FROM contractor_rate_cards rc
+                            WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
+                            ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
+                            (SELECT rc.inner_colour FROM contractor_rate_cards rc
+                            WHERE rc.contractor_id = e.contractor_id
+                            ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 90)
+                    ), 0) AS work_value
+                FROM contractor_work_entries e
+                WHERE ${conWhere.join(' AND ')}
+            `;
+
+            db.get(balanceSql, conParams, (err2, workRow) => {
+                if (err2) {
+                    console.error('[dashboard-monthly-stats] balance', err2);
+                    return res.status(500).json({ error: err2.message });
+                }
+                const workValue = Number(workRow && workRow.work_value) || 0;
+
+                // Total paid to those contractors
+                db.get(`SELECT COALESCE(SUM(payment_amount), 0) AS total_paid FROM contractor_payments`, [], (err3, payRow) => {
+                    if (err3) {
+                        console.error('[dashboard-monthly-stats] pay', err3);
+                        return res.status(500).json({ error: err3.message });
+                    }
+                    const totalPaid = Number(payRow && payRow.total_paid) || 0;
+                    const balancePayable = Math.max(workValue - totalPaid, 0);
+
+                    // Outstanding = unpaid Sale amount for current month (simplified: all Sale is considered collected already, so outstanding = 0 unless you track payments separately)
+                    // We use: Outstanding = 0 for now (no separate payment tracking on sale)
+                    // If you later add sale payment tracking, replace this with real data.
+                    const outstanding = 0;
+
+                    res.json({
+                        month: `${y}-${pad(m + 1)}`,
+                        total_sale: totalSale,
+                        outstanding: outstanding,
+                        total_purchase: totalPurchase,
+                        balance_payable: balancePayable
+                    });
+                });
+            });
+        });
+    } catch (err) {
+        console.error('[dashboard-monthly-stats]', err);
+        res.status(500).json({ error: 'Failed to load monthly stats' });
+    }
 });
 
 app.listen(PORT, () => {

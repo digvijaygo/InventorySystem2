@@ -37,16 +37,9 @@ window.IS2_QA_CATALOG = null;   // filled in below after CATALOG is defined
 
     // extras shown in your screenshot's "Available shortcuts"
     { id: 'add-item',      label: 'Add Item',       icon: 'fa-plus',                  color: 'blue'   },
-    { id: 'proforma',      label: 'Proforma Invoice', icon: 'fa-file-lines',          color: 'indigo' },
     { id: 'sale-order',    label: 'Sale Order',     icon: 'fa-file-signature',        color: 'green'  },
     { id: 'purchase-order',label: 'Purchase Order', icon: 'fa-file-contract',         color: 'red'    },
-    { id: 'delivery',      label: 'Delivery Challan', icon: 'fa-truck',               color: 'orange' },
-    { id: 'sale-return',   label: 'Sale Return',    icon: 'fa-rotate-left',           color: 'pink'   },
-    { id: 'purchase-return',label:'Purchase Return',icon: 'fa-rotate-right',          color: 'purple' },
-    { id: 'cash-bank',     label: 'Cash & Bank',    icon: 'fa-building-columns',      color: 'teal'   },
     { id: 'reports',       label: 'Reports',        icon: 'fa-chart-line',            color: 'blue'   },
-    { id: 'money-transfer',label: 'Money Transfer', icon: 'fa-arrow-right-arrow-left',color: 'indigo' },
-    { id: 'journal',       label: 'Journal Voucher',icon: 'fa-book',                  color: 'orange' },
     { id: 'stock-transfer',label: 'Stock Transfer', icon: 'fa-warehouse',             color: 'purple' },
     { id: 'stock-adj',     label: 'Stock Adjustment',icon:'fa-sliders',               color: 'pink'   }
   ];
@@ -286,6 +279,27 @@ window.IS2_QA_CATALOG = null;   // filled in below after CATALOG is defined
     const params = new URLSearchParams();
     if (loc) params.set('location', loc);
 
+    // -------- Monthly stats (stat cards) --------
+    try {
+      const res = await fetch(`/api/dashboard-monthly-stats?${params.toString()}`, {
+        credentials: 'same-origin', cache: 'no-store'
+      });
+      if (res.ok) {
+        const m = await res.json();
+        const elSale  = document.getElementById('is2DashTotalSale');
+        const elOut   = document.getElementById('is2DashOutstanding');
+        const elPur   = document.getElementById('is2DashTotalPurchase');
+        const elBal   = document.getElementById('is2DashBalancePayable');
+        if (elSale) elSale.innerHTML = `<i class="fas fa-arrow-trend-up"></i> ${fmtINR(m.total_sale)}`;
+        if (elOut)  elOut.innerHTML  = `<i class="fas fa-hourglass-half"></i> ${fmtINR(m.outstanding)}`;
+        if (elPur)  elPur.innerHTML  = `<i class="fas fa-arrow-trend-down"></i> ${fmtINR(m.total_purchase)}`;
+        if (elBal)  elBal.innerHTML  = `<i class="fas fa-wallet"></i> ${fmtINR(m.balance_payable)}`;
+      }
+    } catch (e) {
+      console.warn('[dashboard] monthly stats fetch failed:', e);
+    }
+
+    // -------- Summary (chips + recent) --------
     let data = null;
     try {
       const res = await fetch(`${DASH_API}?${params.toString()}`, {
@@ -297,47 +311,269 @@ window.IS2_QA_CATALOG = null;   // filled in below after CATALOG is defined
       console.warn('[dashboard] summary fetch failed:', e);
     }
 
-    // If API fails, keep the hardcoded demo values in the HTML.
-    if (!data) return;
+    if (data) {
+      const chipSale = document.getElementById('is2DashChipSale');
+      const chipPur  = document.getElementById('is2DashChipPurchase');
+      const chipExp  = document.getElementById('is2DashChipExpense');
+      if (chipSale) chipSale.textContent = `Sale ${fmtINR(data.sale_total)}`;
+      if (chipPur)  chipPur.textContent  = `Purchase ${fmtINR(data.purchase_total)}`;
+      if (chipExp)  chipExp.textContent  = `Expense ${fmtINR(data.expense_total)}`;
 
-    // --- Stat cards ---
-    const elToCollect = document.getElementById('is2DashToCollect');
-    const elToPay     = document.getElementById('is2DashToPay');
-    const elCash      = document.getElementById('is2DashCash');
-    const elStock     = document.getElementById('is2DashStock');
-
-    if (elToCollect) elToCollect.innerHTML = `<i class="fas fa-arrow-trend-up"></i> ${fmtINR(data.to_collect)}`;
-    if (elToPay)     elToPay.innerHTML     = `<i class="fas fa-arrow-trend-down"></i> ${fmtINR(data.to_pay)}`;
-    if (elCash)      elCash.innerHTML      = `<i class="fas fa-wallet"></i> ${fmtINR(data.cash_in_hand)}`;
-    if (elStock)     elStock.innerHTML     = `<i class="fas fa-boxes-stacked"></i> ${fmtINR(data.stock_value)}`;
-
-    // --- Chips ---
-    const chipSale = document.getElementById('is2DashChipSale');
-    const chipPur  = document.getElementById('is2DashChipPurchase');
-    const chipExp  = document.getElementById('is2DashChipExpense');
-    if (chipSale) chipSale.textContent = `Sale ${fmtINR(data.sale_total)}`;
-    if (chipPur)  chipPur.textContent  = `Purchase ${fmtINR(data.purchase_total)}`;
-    if (chipExp)  chipExp.textContent  = `Expense ${fmtINR(data.expense_total)}`;
-
-    // --- Recent transactions table ---
-    const tbody = document.getElementById('is2DashRecentBody');
-    if (tbody && Array.isArray(data.recent)) {
-      if (!data.recent.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:18px;">No recent transactions for this location.</td></tr>';
-      } else {
-        tbody.innerHTML = data.recent.map(r => {
-          const statusCls = r.status === 'Paid' ? 'is2-paid' : 'is2-unpaid';
-          return `<tr>
-            <td>${escHtml(r.type)}</td>
-            <td>${escHtml(r.number)}</td>
-            <td>${escHtml(r.party)}</td>
-            <td>${fmtDate(r.date)}</td>
-            <td class="is2-amt">${fmtINR(r.amount)}</td>
-            <td><span class="is2-status ${statusCls}">${escHtml(r.status)}</span></td>
-          </tr>`;
-        }).join('');
+      const tbody = document.getElementById('is2DashRecentBody');
+      if (tbody && Array.isArray(data.recent)) {
+        if (!data.recent.length) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:18px;">No recent transactions for this location.</td></tr>';
+        } else {
+          tbody.innerHTML = data.recent.map(r => {
+            const statusCls = r.status === 'Paid' ? 'is2-paid' : 'is2-unpaid';
+            return `<tr>
+              <td>${escHtml(r.type)}</td>
+              <td>${escHtml(r.number)}</td>
+              <td>${escHtml(r.party)}</td>
+              <td>${fmtDate(r.date)}</td>
+              <td class="is2-amt">${fmtINR(r.amount)}</td>
+              <td><span class="is2-status ${statusCls}">${escHtml(r.status)}</span></td>
+            </tr>`;
+          }).join('');
+        }
       }
     }
+
+    // -------- Chart + Top Selling + Low Stock --------
+    refreshBusinessChart();
+    refreshTopSelling();
+    refreshLowStock();
+  }
+
+  /* =========================================================
+     LOW STOCK ALERTS — today's data, < 15
+     ========================================================= */
+  async function refreshLowStock() {
+    const listEl = document.getElementById('is2LowStockList');
+    if (!listEl) return;
+
+    const loc = selectedLocation();
+    const params = new URLSearchParams();
+    if (loc) params.set('location', loc);
+
+    let items = null;
+    try {
+      const res = await fetch(`/api/dashboard-low-stock?${params.toString()}`, {
+        credentials: 'same-origin', cache: 'no-store'
+      });
+      if (res.ok) items = await res.json();
+    } catch (e) {
+      console.warn('[dashboard] low stock fetch failed:', e);
+    }
+
+    if (!items || !items.length) {
+      listEl.innerHTML = `
+        <div class="is2-alert-item" style="justify-content:center;color:#64748b;font-size:12px;background:#f0fdf4;border-left-color:#22c55e;">
+          <i class="fas fa-circle-check" style="margin-right:6px;color:#22c55e;"></i>
+          No low stock items today (below 15).
+        </div>`;
+      return;
+    }
+
+    listEl.innerHTML = items.map(it => {
+      const qty = Number(it.stock_at_kpr) || 0;
+      const qtyStr = Number.isInteger(qty) ? String(qty) : qty.toFixed(2);
+      return `
+        <div class="is2-alert-item">
+          <span class="is2-alert-name">${escHtml(it.size)}</span>
+          <span class="is2-tag">${qtyStr} pcs</span>
+        </div>`;
+    }).join('');
+  }
+
+  /* =========================================================
+     BUSINESS OVERVIEW CHART — Sale vs Purchase (current month, last 30 days)
+     ========================================================= */
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  function fmtShort(n) {
+    n = Number(n) || 0;
+    if (n >= 10000000) return (n / 10000000).toFixed(2).replace(/\.00$/, '') + ' Cr';
+    if (n >= 100000)   return (n / 100000).toFixed(2).replace(/\.00$/, '') + ' L';
+    if (n >= 1000)     return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+    return String(Math.round(n));
+  }
+
+  function escXml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g,
+      c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  function renderBusinessChart(series) {
+    const svgG   = document.getElementById('is2ChartPaths');
+    const xEl    = document.getElementById('is2ChartXLabels');
+    const yEl    = document.getElementById('is2ChartYLabels');
+    if (!svgG || !xEl || !yEl) return;
+
+    // series: [{ date: 'YYYY-MM-DD', sale: n, purchase: n }, ...] oldest -> newest
+    const W = 600, H = 220, PAD_TOP = 10, PAD_BOTTOM = 20;
+
+    // find max
+    let maxVal = 0;
+    series.forEach(p => { maxVal = Math.max(maxVal, p.sale || 0, p.purchase || 0); });
+    // nice ceiling
+    const niceStep = (v) => {
+      if (v <= 0) return 1000;
+      const exp = Math.floor(Math.log10(v));
+      const base = Math.pow(10, exp);
+      const n = v / base;
+      let m = 1;
+      if (n > 5) m = 10; else if (n > 2) m = 5; else if (n > 1) m = 2;
+      return m * base;
+    };
+    const top = niceStep(maxVal * 1.15 || 1000);
+
+    // y labels (5 ticks)
+    const ticks = 5;
+    const yLabels = [];
+    for (let i = ticks - 1; i >= 0; i--) {
+      yLabels.push(`<span>${fmtShort(top * i / (ticks - 1))}</span>`);
+    }
+    yEl.innerHTML = yLabels.join('');
+
+    // build path coords
+    const n = series.length;
+    const stepX = n > 1 ? W / (n - 1) : W;
+    const yFor = (v) => {
+      const usable = H - PAD_TOP - PAD_BOTTOM;
+      const ratio = top > 0 ? (Number(v) || 0) / top : 0;
+      return PAD_TOP + usable * (1 - Math.min(ratio, 1));
+    };
+
+    const salePts     = series.map((p, i) => [i * stepX, yFor(p.sale)]);
+    const purchasePts = series.map((p, i) => [i * stepX, yFor(p.purchase)]);
+
+    const linePath = (pts) => pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' ');
+    const areaPath = (pts) => {
+      if (!pts.length) return '';
+      const baseY = H;
+      return `M${pts[0][0].toFixed(2)},${baseY} ` +
+        pts.map(p => `L${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' ') +
+        ` L${pts[pts.length - 1][0].toFixed(2)},${baseY} Z`;
+    };
+
+    svgG.innerHTML = `
+      <path d="${areaPath(salePts)}" fill="url(#gGreen)"/>
+      <path d="${linePath(salePts)}" fill="none" stroke="#22c55e" stroke-width="2"/>
+      <path d="${areaPath(purchasePts)}" fill="url(#gRed)"/>
+      <path d="${linePath(purchasePts)}" fill="none" stroke="#ef4444" stroke-width="2"/>
+    `;
+
+    // x labels — show ~8 evenly spaced
+    const labelCount = 8;
+    const labels = [];
+    for (let i = 0; i < labelCount; i++) {
+      const idx = Math.round(i * (n - 1) / (labelCount - 1));
+      const d = series[idx];
+      if (!d) continue;
+      const dt = new Date(`${d.date}T00:00:00`);
+      labels.push(`<span>${dt.getDate()} ${MONTHS[dt.getMonth()]}</span>`);
+    }
+    xEl.innerHTML = labels.join('');
+  }
+
+  function buildMonthSeries(rows) {
+    // current month only, every day from 1st to today
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth();
+    const today = now.getDate();
+    const series = [];
+    const map = new Map();
+    (rows || []).forEach(r => {
+      const key = r.date || r.day || r.txn_date;
+      if (!key) return;
+      map.set(String(key).slice(0, 10), {
+        sale: Number(r.sale || r.sale_amount || 0),
+        purchase: Number(r.purchase || r.purchase_amount || 0)
+      });
+    });
+    for (let d = 1; d <= today; d++) {
+      const dt = new Date(y, m, d);
+      const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+      const entry = map.get(iso) || { sale: 0, purchase: 0 };
+      series.push({ date: iso, sale: entry.sale, purchase: entry.purchase });
+    }
+    return series;
+  }
+
+  async function refreshBusinessChart() {
+    const loc = selectedLocation();
+    const params = new URLSearchParams();
+    if (loc) params.set('location', loc);
+
+    let rows = null;
+    try {
+      const res = await fetch(`/api/dashboard-trend?${params.toString()}`, {
+        credentials: 'same-origin', cache: 'no-store'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        rows = Array.isArray(data) ? data : (data.series || data.rows || []);
+      }
+    } catch (e) {
+      console.warn('[dashboard] trend fetch failed:', e);
+    }
+
+    // Fallback: derive from recent transactions if available
+    if (!rows) rows = [];
+
+    const series = buildMonthSeries(rows);
+    renderBusinessChart(series);
+
+    // update month chip label
+    const chip = document.getElementById('is2DashMonthChip');
+    if (chip) {
+      const now = new Date();
+      chip.textContent = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+    }
+  }
+
+  /* =========================================================
+     TOP SELLING PRODUCTS — current month, from sale items
+     ========================================================= */
+  async function refreshTopSelling() {
+    const listEl = document.getElementById('is2TopSellList');
+    if (!listEl) return;
+
+    const loc = selectedLocation();
+    const params = new URLSearchParams();
+    if (loc) params.set('location', loc);
+    params.set('month', 'current');
+
+    let items = null;
+    try {
+      const res = await fetch(`/api/top-selling?${params.toString()}`, {
+        credentials: 'same-origin', cache: 'no-store'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        items = Array.isArray(data) ? data : (data.items || []);
+      }
+    } catch (e) {
+      console.warn('[dashboard] top-selling fetch failed:', e);
+    }
+
+    if (!items || !items.length) {
+      listEl.innerHTML = `<div class="is2-sell-item" style="justify-content:center;color:#94a3b8;font-size:12px;padding:16px 0;">
+        No sales data for this period.
+      </div>`;
+      return;
+    }
+
+    listEl.innerHTML = items.slice(0, 5).map(it => `
+      <div class="is2-sell-item">
+        <div class="is2-sell-info">
+          <div class="is2-sell-icon"><i class="fas fa-layer-group"></i></div>
+          <span>${escHtml(it.item_name || it.name || '-')}</span>
+        </div>
+        <span class="is2-amount">${fmtINR(it.amount || it.total || 0)}</span>
+      </div>
+    `).join('');
   }
 
   function wireLocationSelector() {
@@ -377,7 +613,14 @@ window.IS2_QA_CATALOG = null;   // filled in below after CATALOG is defined
         if (e.target === overlay) closeModal();
       });
     }
-
+    // View all → Daily Stocks
+    const lowStockViewAll = document.getElementById('is2LowStockViewAll');
+    if (lowStockViewAll) {
+      lowStockViewAll.addEventListener('click', () => {
+        if (window.showPage) window.showPage('daily-stocks');
+      });
+    }
+    
     // ESC key
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeModal();

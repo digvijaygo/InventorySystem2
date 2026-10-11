@@ -1,0 +1,168 @@
+<div class="page-view" data-page="settings" style="display:none;">
+  <div id="is2-settings" class="is2-settings-fragment">
+
+    <!-- ================= PAGE HEADER ================= -->
+    <div class="st-head">
+      <h1>
+        <i class="fas fa-gear"></i>
+        Settings
+      </h1>
+      <div class="st-head-actions">
+        <span class="st-badge">
+          Manage backups and restore points for your company data.
+        </span>
+      </div>
+    </div>
+
+    <!-- ================= TABS ================= -->
+    <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
+      <button type="button" class="settings-tab active" data-tab="backup" role="tab" aria-selected="true">
+        <i class="fas fa-database"></i> Backup
+      </button>
+    </nav>
+
+    <!-- ================= TAB: BACKUP ================= -->
+    <section class="settings-panel" data-panel="backup" role="tabpanel">
+
+      <!-- -------- Card 1: Backup to Computer -------- -->
+      <div class="settings-card">
+        <div class="settings-card-head">
+          <div class="settings-card-title">
+            <i class="fas fa-desktop"></i>
+            <div>
+              <h2>Backup to Computer</h2>
+              <p>Download a complete copy of this company — customers, suppliers, items, stock, sales and purchases, payments, accounts and settings.</p>
+            </div>
+          </div>
+          <span class="settings-chip">Manual</span>
+        </div>
+
+        <div class="settings-card-body">
+          <p class="settings-hint">
+            It is a single backup file. Keep it somewhere safe, such as an external drive or your own cloud storage.
+          </p>
+          <p class="settings-tag-ok">
+            <i class="fas fa-circle-check"></i> Encrypted. Can only be restored back into InventorySystem2 — it is not a spreadsheet and cannot be opened in another program.
+          </p>
+
+          <button type="button" id="downloadBackupBtn" class="settings-btn settings-btn-primary">
+            <i class="fas fa-download"></i> Download Backup File
+          </button>
+
+          <span id="downloadBackupStatus" class="settings-inline-status" aria-live="polite"></span>
+        </div>
+      </div>
+
+      <!-- -------- Card 2: Automatic Backup -------- -->
+      <div class="settings-card">
+        <div class="settings-card-head">
+          <div class="settings-card-title">
+            <i class="fas fa-clock-rotate-left"></i>
+            <div>
+              <h2>Automatic Backup</h2>
+              <p>A backup becomes due at <strong>11:00 PM</strong> on the computer. If InventorySystem2 is open then, it is saved; otherwise it is saved the next time you sign in.</p>
+            </div>
+          </div>
+          <label class="settings-switch">
+            <input type="checkbox" id="autoBackupEnabled">
+            <span class="settings-switch-slider"></span>
+          </label>
+        </div>
+
+        <div class="settings-card-body">
+          <div class="settings-grid">
+            <div class="settings-field">
+              <label for="autoBackupFolder">Folder</label>
+              <div class="settings-folder-row">
+                <input type="text" id="autoBackupFolder" placeholder="Not chosen yet" readonly>
+                <button type="button" id="chooseFolderBtn" class="settings-btn settings-btn-ghost">
+                  <i class="fas fa-folder-open"></i> Choose Folder
+                </button>
+              </div>
+            </div>
+
+            <div class="settings-field">
+              <label for="autoBackupFrequency">How often</label>
+              <div class="settings-inline-row">
+                <select id="autoBackupFrequency">
+                  <option value="daily">Every day</option>
+                  <option value="hourly">Every hour</option>
+                  <option value="every6hours">Every 6 hours</option>
+                  <option value="every12hours">Every 12 hours</option>
+                </select>
+                <span class="settings-inline-sep">at</span>
+                <input type="time" id="autoBackupTime" value="23:00">
+              </div>
+            </div>
+
+            <div class="settings-field">
+              <label for="autoBackupKeep">Keep backups</label>
+              <div class="settings-inline-row">
+                <input type="number" id="autoBackupKeep" min="1" max="100" value="7">
+                <span class="settings-inline-hint">backups kept in this folder</span>
+              </div>
+              <p class="settings-field-hint">The oldest is removed only if the limit is exceeded, and only after a new backup has been saved successfully.</p>
+            </div>
+
+            <div class="settings-field">
+              <label>Last saved</label>
+              <div class="settings-last-saved" id="autoBackupLastSaved">Never</div>
+            </div>
+          </div>
+
+          <div class="settings-card-actions">
+            <button type="button" id="backupNowBtn" class="settings-btn settings-btn-primary">
+              <i class="fas fa-circle-play"></i> Backup to Folder Now
+            </button>
+            <span class="settings-inline-hint">Changes are saved automatically — there is nothing to submit.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- -------- Card 3: Restore from Backup -------- -->
+      <div class="settings-card">
+        <div class="settings-card-head">
+          <div class="settings-card-title">
+            <i class="fas fa-rotate-left"></i>
+            <div>
+              <h2>Restore from Backup</h2>
+              <p>Bring your company data back from a previous backup file.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-card-body">
+          <div class="settings-warning">
+            <i class="fas fa-triangle-exclamation"></i>
+            <div>
+              <strong>This replaces everything in this company</strong>
+              <p>Restoring overwrites your current customers, suppliers, items, stock, sales, purchases, payments and accounts with the contents of the backup file. Anything entered since that backup was taken will be gone. This cannot be undone — download a fresh backup first if you might need today's data.</p>
+            </div>
+          </div>
+
+          <label for="restoreFileInput" class="settings-dropzone">
+            <i class="fas fa-file-arrow-up"></i>
+            <span class="settings-dropzone-title">Choose Backup File</span>
+            <span class="settings-dropzone-hint">.sqlite file only</span>
+            <input type="file" id="restoreFileInput" accept=".sqlite,application/x-sqlite3,application/octet-stream" hidden>
+          </label>
+
+          <div id="restoreFilePreview" class="settings-file-preview" hidden>
+            <i class="fas fa-database"></i>
+            <span id="restoreFileName">backup.sqlite</span>
+            <span id="restoreFileSize" class="settings-file-size"></span>
+            <button type="button" id="clearRestoreFileBtn" class="settings-btn settings-btn-ghost" title="Remove file">
+              <i class="fas fa-xmark"></i>
+            </button>
+          </div>
+
+          <button type="button" id="restoreBackupBtn" class="settings-btn settings-btn-danger" disabled>
+            <i class="fas fa-triangle-exclamation"></i> Restore From Backup
+          </button>
+          <span id="restoreBackupStatus" class="settings-inline-status" aria-live="polite"></span>
+        </div>
+      </div>
+
+    </section>
+  </div>
+</div>

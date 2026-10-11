@@ -11,10 +11,16 @@
     <link rel="stylesheet" href="attendance.css">
     <link rel="stylesheet" href="users.css">
     <link rel="stylesheet" href="sale.css">
+    <link rel="stylesheet" href="estimate.css">
     <link rel="stylesheet" href="purchase.css">
     <link rel="stylesheet" href="dashboard.css">
     <link rel="stylesheet" href="reports.css">
     <link rel="stylesheet" href="dailystocks.css">
+    <link rel="stylesheet" href="stocktransfer.css">
+    <link rel="stylesheet" href="inventoryreport.css">
+    <link rel="stylesheet" href="sharewithCA.css">
+    <link rel="stylesheet" href="settings.css">
+
     <script src="auth-guard.js"></script>
     <script>
         // Disable browser scroll restoration — avoids jumping to the
@@ -72,40 +78,48 @@
     </header>
 
     <div class="main-container">
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <span id="sidebarUserName" class="sidebar-user-loading"></span>
+                <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" type="button"
+                title="Collapse menu" aria-label="Collapse menu" aria-expanded="true">
+                <i class="fa-solid fa-angles-left"></i>
+                </button>
             </div>
             <ul class="nav-links">
                 <li data-page="dashboard" class="active"><i class="fa-solid fa-chart-pie"></i><span>Dashboard</span></li>
                 <li data-page="contractors"><i class="fa-solid fa-users"></i><span>Contractors</span></li>
                 <li data-page="attendance"><i class="fa-solid fa-calendar-check"></i><span>Attendance &amp; Payment</span></li>
                 <li><i class="fa-solid fa-box"></i><span>Products</span></li>
-                <li data-page="sale"><i class="fa-solid fa-tags"></i><span>Sale</span></li>
+                <li class="nav-group" data-group="sale">
+    <div class="nav-group-header">
+        <i class="fa-solid fa-tags"></i>
+        <span>Sale</span>
+        <i class="fa-solid fa-chevron-down nav-chevron"></i>
+    </div>
+    <ul class="nav-submenu">
+        <li data-page="sale"><i class="fa-solid fa-cart-shopping"></i><span>Sale</span></li>
+        <li data-page="estimate"><i class="fa-solid fa-file-invoice-dollar"></i><span>Estimate / Quotation</span></li>
+    </ul>
+</li>
                 <li data-page="purchase"><i class="fa-solid fa-cart-plus"></i><span>Purchase</span></li>
-                <li class="nav-group" data-group="inventory">
-                <div class="nav-group-header">
-                <i class="fa-solid fa-warehouse"></i>
-                <span>Inventory</span>
-                <i class="fa-solid fa-chevron-down nav-chevron"></i>
-                </div>
-                <ul class="nav-submenu">
-                    <li data-page="daily-stocks"><i class="fa-solid fa-boxes-stacked"></i><span>Daily Stocks</span></li>
-                    <li data-page="stock-transfer"><i class="fa-solid fa-right-left"></i><span>Stock Transfer</span></li>
-                    <li data-page="stock-adjustment"><i class="fa-solid fa-sliders"></i><span>Stock Adjustment</span></li>
-                    <li data-page="inventory-report"><i class="fa-solid fa-chart-column"></i><span>Inventory Report</span></li>
-                    </ul>
-                    </li>
-                <li><i class="fa-solid fa-file-invoice-dollar"></i><span>Firm Management</span></li>
-                <li><i class="fa-solid fa-building-columns"></i><span>Cash &amp; Bank</span></li>
+               <li class="nav-group" data-group="inventory">
+    <div class="nav-group-header">
+        <i class="fa-solid fa-warehouse"></i>
+        <span>Inventory</span>
+        <i class="fa-solid fa-chevron-down nav-chevron"></i>
+    </div>
+    <ul class="nav-submenu">
+        <li data-page="daily-stocks"><i class="fa-solid fa-boxes-stacked"></i><span>Daily Stocks</span></li>
+        <li data-page="stock-transfer"><i class="fa-solid fa-right-left"></i><span>Stock Transfer</span></li>
+        <li data-page="inventory-report"><i class="fa-solid fa-chart-column"></i><span>Inventory Report</span></li>
+    </ul>
+</li>
                 <li data-page="reports"><i class="fa-solid fa-file-lines"></i><span>Reports</span></li>
                 <li><i class="fa-solid fa-gear"></i><span>Utilities</span></li>
-                <li><i class="fa-solid fa-share-nodes"></i><span>Share with CA</span></li>
-                <li><i class="fa-solid fa-crown"></i><span>Plans &amp; Pricing</span></li>
+                <li data-page="sharewithCA" ><i class="fa-solid fa-share-nodes"></i><span>Share with CA</span></li>
                 <li data-page="users"><i class="fa-solid fa-user-shield"></i><span>Users &amp; Access</span></li>
-                <li><i class="fa-solid fa-calculator"></i><span>Accounting</span></li>
-                <li><i class="fa-solid fa-headset"></i><span>Support Centre</span></li>
-                <li><i class="fa-solid fa-sliders"></i><span>Settings</span></li>
+                <li data-page="settings"><i class="fa-solid fa-sliders"></i><span>Settings</span></li>
             </ul>
         </aside>
 

@@ -1,13 +1,149 @@
 <div class="page-view" data-page="stock-transfer" style="display:none;">
-  <div id="is2-stock-transfer" class="is2-reports-fragment">
-    <div class="is2-reports-head">
-      <h1><i class="fas fa-right-left" style="color:#16a34a;"></i> Stock Transfer</h1>
-    </div>
-    <div class="is2-reports-panels">
-      <div class="is2-reports-empty">
+  <div id="is2-stocktransfer" class="is2-stocktransfer-fragment">
+
+    <!-- ================= PAGE HEADER ================= -->
+    <div class="st-head">
+      <h1>
         <i class="fas fa-right-left"></i>
-        <p>Stock Transfer content will appear here.</p>
+        Stock Transfer
+      </h1>
+      <div class="st-head-actions">
+        <span class="st-badge">
+          Transfers apply to <strong>today</strong> only. Source stock decreases, destination stock increases.
+        </span>
       </div>
     </div>
+
+    <!-- ================= FILTER PANEL ================= -->
+    <section class="st-filter-panel">
+
+      <div class="st-field">
+        <label for="stCategoryDropdownBtn">Category</label>
+        <div class="multi-select" id="stCategoryMultiSelect">
+          <button type="button" id="stCategoryDropdownBtn" class="multi-select-toggle">Select categories</button>
+          <div id="stCategoryDropdownMenu" class="multi-select-menu" hidden>
+            <label class="multi-option select-all-option">
+              <input type="checkbox" id="stCategorySelectAll">
+              <span>Select All Categories</span>
+            </label>
+            <div id="stCategoryOptions" class="multi-options-list"></div>
+          </div>
+        </div>
+        <select id="stCategorySelect" multiple class="visually-hidden-select" aria-hidden="true" tabindex="-1"></select>
+      </div>
+
+      <div class="st-field">
+        <label for="stSubCategoryDropdownBtn">Sub-Category</label>
+        <div class="multi-select" id="stSubCategoryMultiSelect">
+          <button type="button" id="stSubCategoryDropdownBtn" class="multi-select-toggle">Select sub-categories</button>
+          <div id="stSubCategoryDropdownMenu" class="multi-select-menu" hidden>
+            <label class="multi-option select-all-option">
+              <input type="checkbox" id="stSubCategorySelectAll">
+              <span>Select All Sub-Categories</span>
+            </label>
+            <div id="stSubCategoryOptions" class="multi-options-list"></div>
+          </div>
+        </div>
+        <select id="stSubCategorySelect" multiple disabled class="visually-hidden-select" aria-hidden="true" tabindex="-1"></select>
+      </div>
+
+      <div class="st-field">
+        <label for="stDate">Date</label>
+        <input type="date" id="stDate" readonly>
+      </div>
+
+      <div class="st-field">
+        <label>&nbsp;</label>
+        <button id="stLoadBtn" type="button" class="st-btn st-btn-primary">
+          <i class="fas fa-filter"></i> Load Transfers
+        </button>
+      </div>
+
+    </section>
+
+    <!-- ================= TOOLBAR ================= -->
+    <div class="st-section-header">
+      <h2>Today's Transfers</h2>
+      <div class="st-toolbar">
+        <input type="text" id="stFindInput" placeholder="Find by any text...">
+        <button id="stFindBtn" type="button" class="st-btn st-btn-ghost"><i class="fas fa-search"></i> Find</button>
+        <button id="stClearFindBtn" type="button" class="st-btn st-btn-ghost"><i class="fas fa-xmark"></i> Clear</button>
+        <button id="stOpenAddBtn" type="button" class="st-btn st-btn-primary"><i class="fas fa-plus"></i> New Transfer</button>
+        <button id="stExportBtn" type="button" class="st-btn st-btn-export"><i class="fas fa-file-export"></i> Export</button>
+      </div>
+    </div>
+
+    <!-- ================= TABLE ================= -->
+    <div class="st-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>SR NO</th>
+            <th>DATE</th>
+            <th>CATEGORY</th>
+            <th>SUB-CATEGORY</th>
+            <th>FROM</th>
+            <th>TO</th>
+            <th>QTY</th>
+            <th>REMARKS</th>
+            <th>ACTIONS</th>
+          </tr>
+        </thead>
+        <tbody id="stTableBody"></tbody>
+      </table>
+    </div>
+
+    <!-- ================= SUMMARY ================= -->
+    <section class="st-summary-panel" aria-label="Transfer summary">
+      <div class="st-summary-header">
+        <div>
+          <h2>TRANSFER SUMMARY <span>(Today)</span></h2>
+          <p>Total quantity transferred today across the selected filters.</p>
+        </div>
+        <div class="st-summary-total">
+          Total Transferred Qty:
+          <strong id="stTotalQty">0</strong>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= ADD / EDIT MODAL ================= -->
+    <div id="stRecordModal" class="st-modal-overlay" style="display:none;">
+      <div class="st-modal-card">
+        <div class="modal-header">
+          <div>
+            <h2 id="stModalTitle">New Transfer</h2>
+            <p>Move stock from one location to another for today.</p>
+          </div>
+          <button type="button" id="stCloseModalBtn" class="modal-close">&times;</button>
+        </div>
+
+        <form id="stTransferForm" class="st-form modal-form">
+          <select id="stFormCategory" required></select>
+
+          <select id="stFormSubCategory" required></select>
+
+          <select id="stFormFromLocation" required></select>
+
+          <select id="stFormToLocation" required></select>
+
+          <input type="number" id="stFormQty" placeholder="Quantity" min="0.01" step="0.01" required>
+
+          <input type="text" id="stFormRemarks" placeholder="Remarks (optional)">
+
+          <p class="record-date-note">Transfer date: <strong id="stFormDateDisplay"></strong> (today)</p>
+
+          <div class="modal-actions">
+            <button id="stCancelBtn" type="button" class="st-btn st-btn-ghost">
+              <i class="fas fa-times"></i> Cancel
+            </button>
+            <button type="submit" class="st-btn st-btn-primary">
+              <i class="fas fa-check"></i> Save Transfer
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
   </div>
 </div>

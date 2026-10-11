@@ -1,13 +1,150 @@
 <div class="page-view" data-page="inventory-report" style="display:none;">
-  <div id="is2-inventory-report" class="is2-reports-fragment">
-    <div class="is2-reports-head">
-      <h1><i class="fas fa-chart-column" style="color:#16a34a;"></i> Inventory Report</h1>
-    </div>
-    <div class="is2-reports-panels">
-      <div class="is2-reports-empty">
+  <div id="is2-inventory-report" class="is2-inventory-report-fragment">
+
+    <!-- ================= PAGE HEADER ================= -->
+    <div class="ir-head">
+      <h1>
         <i class="fas fa-chart-column"></i>
-        <p>Inventory Report content will appear here.</p>
+        Inventory Report
+      </h1>
+      <div class="ir-head-actions">
+        <span class="ir-badge">
+          Stock transfer activity across all locations.
+        </span>
       </div>
     </div>
+
+    <!-- ================= FILTER PANEL ================= -->
+    <section class="ir-filter-panel">
+
+      <div class="ir-field">
+        <label for="irFromDate">From Date</label>
+        <input type="date" id="irFromDate">
+      </div>
+
+      <div class="ir-field">
+        <label for="irToDate">To Date</label>
+        <input type="date" id="irToDate">
+      </div>
+
+      <div class="ir-field">
+        <label for="irCategoryDropdownBtn">Category</label>
+        <div class="multi-select" id="irCategoryMultiSelect">
+          <button type="button" id="irCategoryDropdownBtn" class="multi-select-toggle">Select categories</button>
+          <div id="irCategoryDropdownMenu" class="multi-select-menu" hidden>
+            <label class="multi-option select-all-option">
+              <input type="checkbox" id="irCategorySelectAll">
+              <span>Select All Categories</span>
+            </label>
+            <div id="irCategoryOptions" class="multi-options-list"></div>
+          </div>
+        </div>
+        <select id="irCategorySelect" multiple class="visually-hidden-select" aria-hidden="true" tabindex="-1"></select>
+      </div>
+
+      <div class="ir-field">
+        <label for="irSubCategoryDropdownBtn">Sub-Category</label>
+        <div class="multi-select" id="irSubCategoryMultiSelect">
+          <button type="button" id="irSubCategoryDropdownBtn" class="multi-select-toggle">Select sub-categories</button>
+          <div id="irSubCategoryDropdownMenu" class="multi-select-menu" hidden>
+            <label class="multi-option select-all-option">
+              <input type="checkbox" id="irSubCategorySelectAll">
+              <span>Select All Sub-Categories</span>
+            </label>
+            <div id="irSubCategoryOptions" class="multi-options-list"></div>
+          </div>
+        </div>
+        <select id="irSubCategorySelect" multiple disabled class="visually-hidden-select" aria-hidden="true" tabindex="-1"></select>
+      </div>
+
+      <div class="ir-field">
+        <label>&nbsp;</label>
+        <button id="irLoadBtn" type="button" class="ir-btn ir-btn-primary">
+          <i class="fas fa-filter"></i> Apply Filters
+        </button>
+      </div>
+
+      <div class="ir-field">
+        <label>&nbsp;</label>
+        <button id="irResetBtn" type="button" class="ir-btn ir-btn-ghost">
+          <i class="fas fa-rotate-left"></i> Reset
+        </button>
+      </div>
+
+    </section>
+
+    <!-- ================= SUMMARY CARDS ================= -->
+    <section class="ir-summary">
+      <div class="ir-summary-card">
+        <div class="ir-summary-icon green">
+          <i class="fas fa-right-left"></i>
+        </div>
+        <div class="ir-summary-body">
+          <span class="ir-summary-label">Total Transfers</span>
+          <span class="ir-summary-value" id="irTotalTransfers">0</span>
+        </div>
+      </div>
+
+      <div class="ir-summary-card">
+        <div class="ir-summary-icon blue">
+          <i class="fas fa-cubes"></i>
+        </div>
+        <div class="ir-summary-body">
+          <span class="ir-summary-label">Total Quantity Transferred</span>
+          <span class="ir-summary-value" id="irTotalQty">0</span>
+        </div>
+      </div>
+
+      <div class="ir-summary-card">
+        <div class="ir-summary-icon amber">
+          <i class="fas fa-shapes"></i>
+        </div>
+        <div class="ir-summary-body">
+          <span class="ir-summary-label">Categories Involved</span>
+          <span class="ir-summary-value" id="irTotalCategories">0</span>
+        </div>
+      </div>
+
+      <div class="ir-summary-card">
+        <div class="ir-summary-icon purple">
+          <i class="fas fa-location-dot"></i>
+        </div>
+        <div class="ir-summary-body">
+          <span class="ir-summary-label">Locations Involved</span>
+          <span class="ir-summary-value" id="irTotalLocations">0</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= TOOLBAR ================= -->
+    <div class="ir-section-header">
+      <h2>Transfer Records</h2>
+      <div class="ir-toolbar">
+        <input type="text" id="irFindInput" placeholder="Find by any text...">
+        <button id="irFindBtn" type="button" class="ir-btn ir-btn-ghost"><i class="fas fa-search"></i> Find</button>
+        <button id="irClearFindBtn" type="button" class="ir-btn ir-btn-ghost"><i class="fas fa-xmark"></i> Clear</button>
+        <button id="irExportBtn" type="button" class="ir-btn ir-btn-export"><i class="fas fa-file-export"></i> Export</button>
+      </div>
+    </div>
+
+    <!-- ================= TABLE ================= -->
+    <div class="ir-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>SR NO</th>
+            <th>DATE</th>
+            <th>CATEGORY</th>
+            <th>SUB-CATEGORY</th>
+            <th>FROM</th>
+            <th>TO</th>
+            <th>QTY</th>
+            <th>REMARKS</th>
+          </tr>
+        </thead>
+        <tbody id="irTableBody"></tbody>
+      </table>
+    </div>
+
   </div>
 </div>

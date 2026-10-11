@@ -7,16 +7,20 @@
         { name: 'attendance',        fragment: 'attendance.html',       script: 'attendance.js'  },
         { name: 'users',             fragment: 'users.html',            script: 'users.js'       },
         { name: 'sale',              fragment: 'sale.html',             script: 'sale.js'        },
+        { name: 'estimate',          fragment: 'estimate.html',         script: 'estimate.js' },
         { name: 'purchase',          fragment: 'purchase.html',         script: 'purchase.js'    },
         { name: 'reports',           fragment: 'reports.html',          script: 'reports.js'     },
         // --- Inventory sub-pages ---
         { name: 'daily-stocks',      fragment: 'dailystocks.html',      script: 'dailystocks.js' },
-        { name: 'stock-transfer',    fragment: 'stocktransfer.html',    script: null },
-        { name: 'stock-adjustment',  fragment: 'stockadjustment.html',  script: null },
-        { name: 'inventory-report',  fragment: 'inventoryreport.html',  script: null },
+        { name: 'stock-transfer',    fragment: 'stocktransfer.html',    script: 'stocktransfer.js' },
+        { name: 'inventory-report',  fragment: 'inventoryreport.html',  script: 'inventoryreport.js' },
+
+        { name: 'sharewithCA', fragment: 'sharewithCA.html', script: 'sharewithCA.js' },
+        { name: 'settings', fragment: 'settings.html', script: 'settings.js' },
     ];
 
     const CURRENT_PAGE_KEY = 'is2.currentPage';
+    let activePage = null;
 
     /* ============================================================
        QUICK ACTIONS → page routing
@@ -24,35 +28,19 @@
     const QA_ROUTES = {
         'add-sale':         { page: 'sale',           action: null },
         'new-sale':         { page: 'sale',           action: null },
-        'sale-order':       { page: 'sale',           action: null },
-        'sale-return':      { page: 'sale',           action: null },
-        'estimate':         { page: 'sale',           action: null },
-        'proforma':         { page: 'sale',           action: null },
-
+        'estimate-quotation': { page: 'estimate', action: null },
         'add-purchase':     { page: 'purchase',       action: null },
         'new-purchase':     { page: 'purchase',       action: null },
-        'purchase-order':   { page: 'purchase',       action: null },
-        'purchase-return':  { page: 'purchase',       action: null },
-        'delivery':         { page: 'purchase',       action: null },
-
+        
         'add-contractor':   { page: 'contractors',    action: null },
         'add-payment':      { page: 'contractors',    action: null },
         'add-work-entry':   { page: 'contractors',    action: null },
 
         'add-employee':     { page: 'users',          action: null },
-        'add-party':        { page: 'users',          action: null },
-
+        
         'add-item':         { page: 'daily-stocks',   action: null },
         'stock-transfer':   { page: 'stock-transfer', action: null },
-        'stock-adj':        { page: 'stock-adjustment', action: null },
-
-        'payment-in':       { page: 'sale',           action: null },
-        'payment-out':      { page: 'purchase',       action: null },
-        'expense':          { page: 'purchase',       action: null },
-        'transfer':         { page: 'daily-stocks',   action: null },
-        'money-transfer':   { page: 'daily-stocks',   action: null },
-        'cash-bank':        { page: 'reports',        action: null },
-        'journal':          { page: 'reports',        action: null },
+        
         'reports':          { page: 'reports',        action: null },
     };
 
@@ -70,6 +58,7 @@
     }
 
     function showPage(pageName) {
+        activePage = pageName;
         document.querySelectorAll('.nav-links li[data-page]').forEach((item) => {
             item.classList.toggle('active', item.dataset.page === pageName);
         });
@@ -96,43 +85,30 @@
     }
 
     function getCurrentPage() {
-        const visible = document.querySelector('.page-view:not([style*="display: none"])');
-        if (visible && visible.dataset.page) return visible.dataset.page;
-        try { return localStorage.getItem(CURRENT_PAGE_KEY) || 'dashboard'; } catch (e) { return 'dashboard'; }
+        if (activePage) return activePage;
+        const activeNav = document.querySelector('.nav-links li[data-page].active');
+        return (activeNav && activeNav.dataset.page) || 'dashboard';
     }
 
     /* ============================================================
-       SOFT-REFRESH HOOKS
+       PAGE REFRESH
        ============================================================ */
-    function getSoftRefreshHooks() {
-        return {
-            'dashboard':      window.initDashboardPage,
-            'contractors':    window.initContractorPage,
-            'sale':           window.initSalePage,
-            'purchase':       window.initPurchasePage,
-            'users':          window.initUsersPage,
-            'reports':        window.initReportsPage,
-            'daily-stocks':   window.initDailyStocksPage,
-        };
-    }
+    const REFRESH_PAGE_KEY = 'is2.refreshPage';
 
+    // Page init functions are not idempotent (they re-bind listeners),
+    // so reload everything and restore the current page afterwards.
     function refreshCurrentPage() {
         const pageName = getCurrentPage();
-        const hooks = getSoftRefreshHooks();
-        const hook = hooks[pageName];
-
-        if (typeof hook === 'function') {
-            try {
-                hook();
-                console.log('[refresh] Soft-refreshed page:', pageName);
-                return;
-            } catch (err) {
-                console.error('[refresh] Soft hook failed for', pageName, err);
-            }
-        }
-
-        console.log('[refresh] Full reload for page:', pageName);
+        try { sessionStorage.setItem(REFRESH_PAGE_KEY, pageName); } catch (e) {}
         location.reload();
+    }
+
+    function consumeRefreshPage() {
+        try {
+            const page = sessionStorage.getItem(REFRESH_PAGE_KEY);
+            sessionStorage.removeItem(REFRESH_PAGE_KEY);
+            return page;
+        } catch (e) { return null; }
     }
 
     function wireRefresh() {
@@ -343,6 +319,7 @@
        INIT
        ============================================================ */
     async function initialize() {
+        const refreshPage = consumeRefreshPage();
         const host = document.querySelector('#pageHost');
         let revealed = false;
 
@@ -391,13 +368,15 @@
             if (typeof window.initContractorPage === 'function')      window.initContractorPage();
             if (typeof window.initUsersPage === 'function')           window.initUsersPage();
             if (typeof window.initSalePage === 'function')            window.initSalePage();
+            if (typeof window.initEstimatePage === 'function')        window.initEstimatePage();
             if (typeof window.initPurchasePage === 'function')        window.initPurchasePage();
             if (typeof window.initDashboardPage === 'function')       window.initDashboardPage();
             if (typeof window.initReportsPage === 'function')         window.initReportsPage();
             if (typeof window.initDailyStocksPage === 'function')     window.initDailyStocksPage();
             if (typeof window.initStockTransferPage === 'function')   window.initStockTransferPage();
-            if (typeof window.initStockAdjustmentPage === 'function') window.initStockAdjustmentPage();
             if (typeof window.initInventoryReportPage === 'function') window.initInventoryReportPage();
+            if (typeof window.initShareWithCAPage === 'function')     window.initShareWithCAPage();
+            if (typeof window.initSettingsPage === 'function')          window.initSettingsPage();    
 
             // 6) Logout
             const logoutBtn = document.querySelector('#logoutBtn');
@@ -411,9 +390,12 @@
             wireNavClicks();
             wireRefresh();
             wireQuickActions();
+            initSidebarCollapse();
 
-            // 8) ALWAYS land on dashboard after login.
-            const initialPage = 'dashboard';
+            // 8) Land on dashboard, unless the refresh button was used.
+            const initialPage = refreshPage && document.querySelector(`.page-view[data-page="${refreshPage}"]`)
+                ? refreshPage
+                : 'dashboard';
             if (document.querySelector(`.page-view[data-page="${initialPage}"]`)) {
                 showPage(initialPage);
             } else {
@@ -435,5 +417,45 @@
         window.refreshCurrentPage = refreshCurrentPage;
     }
 
+
+ /* ============================================================
+   SIDEBAR COLLAPSE
+   ============================================================ */
+function initSidebarCollapse() {
+    const sidebar = document.getElementById('sidebar');
+    const btn = document.getElementById('sidebarCollapseBtn');
+    if (!sidebar || !btn) {
+        console.warn('[sidebar] collapse elements not found');
+        return;
+    }
+
+    const icon = btn.querySelector('i');
+
+    function apply(collapsed) {
+        sidebar.classList.toggle('collapsed', collapsed);
+        btn.setAttribute('aria-expanded', String(!collapsed));
+        btn.title = collapsed ? 'Expand menu' : 'Collapse menu';
+        if (icon) {
+            icon.classList.toggle('fa-angles-left', !collapsed);
+            icon.classList.toggle('fa-angles-right', collapsed);
+        }
+    }
+
+    // Always start expanded on page load
+    apply(false);
+
+    btn.addEventListener('click', () => {
+        const next = !sidebar.classList.contains('collapsed');
+        apply(next);
+        window.dispatchEvent(new Event('resize'));
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+            e.preventDefault();
+            btn.click();
+        }
+    });
+}
     initialize();
 }());

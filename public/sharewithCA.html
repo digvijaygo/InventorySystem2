@@ -1,0 +1,96 @@
+<div class="page-view" data-page="sharewithCA">
+  <div class="swc-header">
+    <div class="swc-header-left">
+      <div class="swc-header-icon"><i class="fa-solid fa-file-zipper"></i></div>
+      <h1>Share with CA</h1>
+    </div>
+  </div>
+  <p class="swc-subhead">Manage CA contact details and prepare reports for the selected period.</p>
+
+  <div class="swc-grid">
+    <section class="swc-card" aria-labelledby="caConfigTitle">
+      <div class="swc-card-header">
+        <i class="fa-solid fa-user-tie"></i>
+        <h2 id="caConfigTitle">CA Contact Configuration</h2>
+      </div>
+      <div class="swc-card-body">
+        <form id="caConfigForm" novalidate>
+          <div class="swc-form-group">
+            <label for="caName">Accountant / CA Name <span class="swc-req">*</span></label>
+            <div class="swc-input-wrap">
+              <i class="fa-solid fa-user"></i>
+              <input type="text" id="caName" placeholder="e.g. Harish Mehta &amp; Associates" required>
+            </div>
+          </div>
+          <div class="swc-form-group">
+            <label for="caEmail">CA Email Address</label>
+            <div class="swc-input-wrap">
+              <i class="fa-solid fa-envelope"></i>
+              <input type="email" id="caEmail" placeholder="e.g. ca.mehta@firm.com">
+            </div>
+          </div>
+          <div class="swc-form-group">
+            <label for="caPhone">CA Mobile / WhatsApp Number</label>
+            <div class="swc-input-wrap">
+              <i class="fa-solid fa-phone"></i>
+              <input type="tel" id="caPhone" placeholder="e.g. 9876543210">
+            </div>
+          </div>
+          <div class="swc-form-group">
+            <label for="caFirm">CA Registration ID / Firm Registration No.</label>
+            <div class="swc-input-wrap">
+              <i class="fa-solid fa-file-signature"></i>
+              <input type="text" id="caFirm" placeholder="e.g. ICAI FRN 123456N">
+            </div>
+          </div>
+          <div class="swc-divider"></div>
+          <button type="submit" class="swc-btn swc-btn-primary swc-btn-block">
+            <i class="fa-solid fa-save"></i> Save Contact Configuration
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <section class="swc-card" aria-labelledby="reportPackageTitle">
+      <div class="swc-card-header">
+        <i class="fa-solid fa-file-export"></i>
+        <h2 id="reportPackageTitle">Report package</h2>
+      </div>
+      <div class="swc-card-body">
+      <div class="swc-panel">
+        <span class="swc-step"><i class="fa-solid fa-calendar-days"></i> Period</span>
+        <div class="swc-date-row">
+          <label class="swc-date-field" for="startDate">From<input type="date" id="startDate" class="swc-date"></label>
+          <span class="swc-date-sep" aria-hidden="true"><i class="fa-solid fa-arrow-right"></i></span>
+          <label class="swc-date-field" for="endDate">To<input type="date" id="endDate" class="swc-date"></label>
+        </div>
+
+        <span class="swc-step swc-mt-3"><i class="fa-solid fa-location-dot"></i> Locations</span>
+        <details class="swc-location-select" id="locationSelect">
+          <summary id="locationSelectLabel">Select locations</summary>
+          <div class="swc-location-options" id="locationOptions">
+            <label class="swc-location-option swc-location-all"><input type="checkbox" id="selectAllLocations" checked> <span>All locations</span></label>
+            <label class="swc-location-option"><input type="checkbox" value="Arneel Industries Karodi" checked> <span>Arneel Industries Karodi</span></label>
+            <label class="swc-location-option"><input type="checkbox" value="Anil Industries Karodi" checked> <span>Anil Industries Karodi</span></label>
+            <label class="swc-location-option"><input type="checkbox" value="Anil Industries Ghanegoan" checked> <span>Anil Industries Ghanegoan</span></label>
+            <label class="swc-location-option"><input type="checkbox" value="Anil Industries Yavatmal" checked> <span>Anil Industries Yavatmal</span></label>
+            <label class="swc-location-option"><input type="checkbox" value="Kpr Projections" checked> <span>Kpr Projections</span></label>
+          </div>
+        </details>
+
+        <span class="swc-step swc-mt-3"><i class="fa-solid fa-file-lines"></i> Documents</span>
+        <div class="swc-doc-grid" id="docTypesGroup">
+          <label class="swc-doc-item"><input type="checkbox" value="SALE" checked><span>Sale report</span></label>
+          <label class="swc-doc-item"><input type="checkbox" value="PURCHASE" checked><span>Purchase report</span></label>
+          <label class="swc-doc-item"><input type="checkbox" value="SALE_GST"><span>Sale report with GST</span></label>
+          <label class="swc-doc-item"><input type="checkbox" value="PURCHASE_GST"><span>Purchase report with GST</span></label>
+        </div>
+      </div>
+
+      <button class="swc-btn swc-btn-primary swc-btn-block swc-btn-lg" id="downloadZipBtn" type="button">
+        <i class="fa-solid fa-download"></i> Download ZIP
+      </button>
+    </div>
+    </section>
+  </div>
+</div>

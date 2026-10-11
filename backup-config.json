@@ -1,0 +1,8 @@
+{
+  "enabled": false,
+  "folder": "",
+  "frequency": "daily",
+  "time": "23:00",
+  "keep": 7,
+  "lastSaved": null
+}

@@ -695,9 +695,10 @@
             ? `<button class="save-btn" onclick="saveRowEdit(${row.id})">Save</button><button class="cancel-btn" onclick="cancelRowEdit()">Cancel</button>`
             : `<button class="edit-btn" onclick="startRowEdit(${row.id})">Edit</button><button class="delete-btn" onclick="deleteRow(${row.id})">Delete</button>`)
           : '<span class="readonly-text">Read-only</span>';
-        const tr = document.createElement('tr');
+                const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${index + 1}</td>
+          <td>${escapeHtml(row.location || '')}</td>
           <td>${escapeHtml(row.category || '')}</td>
           <td>${descriptionCell}</td>
           <td>${qtyOneCell}</td>
@@ -711,7 +712,7 @@
       });
       if (!rows.length) {
         const tr = document.createElement('tr');
-        tr.innerHTML = '<td colspan="9" class="empty-row">No records found for selected filters.</td>';
+        tr.innerHTML = '<td colspan="10" class="empty-row">No records found for selected filters.</td>';
         stocksTableBody.appendChild(tr);
       }
     }
