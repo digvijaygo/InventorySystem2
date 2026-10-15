@@ -54,6 +54,8 @@ color:#fff;
 .nav-links li i{width:16px;text-align:center;font-size:13px;flex-shrink:0;}
 .nav-links li:hover{background:#e8e8e8;color:var(--text-dark);}
 .nav-links li.active{color:var(--blue);background:#e3f2fd;border-left-color:var(--blue);font-weight:500;}
+.nav-links [hidden]{display:none!important;}
+.contractor-action[hidden]{display:none!important;}
 
 /* ===== CONTENT ===== */
 .content{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:#fff;}

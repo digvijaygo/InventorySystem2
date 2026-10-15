@@ -1,0 +1,110 @@
+<section class="products-page parties-layout page-view" data-page="products">
+  <aside class="parties-list-panel products-list-panel">
+    <div class="panel-header">
+      <h3><i class="fa-solid fa-box"></i> Products</h3>
+      <button class="btn-green-sm" id="addProductBtn" type="button">Add Product</button>
+    </div>
+    <div class="search-filter">
+      <input type="search" id="productsSearch" placeholder="Search Product Name" aria-label="Search products" disabled>
+    </div>
+    <div class="list-filters products-list-filters">
+      <div class="list-filter-row list-filter-row--block">
+        <label>Location</label>
+        <div class="ms" id="productsLocMultiSelect">
+          <button type="button" class="ms-toggle" id="productsLocToggle" aria-expanded="false">
+            <span id="productsLocToggleLabel">All Locations</span>
+            <i class="fa-solid fa-chevron-down ms-caret" aria-hidden="true"></i>
+          </button>
+          <div class="ms-menu" id="productsLocMenu" hidden>
+            <label class="ms-option ms-all">
+              <input type="checkbox" id="productsLocSelectAll" checked>
+              <span>All Locations</span>
+            </label>
+            <div class="ms-options" id="productsLocOptions">
+              <label class="ms-option"><input type="checkbox" value="Arneel Industries Karodi" checked><span>Arneel Industries Karodi</span></label>
+              <label class="ms-option"><input type="checkbox" value="Anil Industries Karodi" checked><span>Anil Industries Karodi</span></label>
+              <label class="ms-option"><input type="checkbox" value="Anil Industries Ghanegoan" checked><span>Anil Industries Ghanegoan</span></label>
+              <label class="ms-option"><input type="checkbox" value="Anil Industries Yavatmal" checked><span>Anil Industries Yavatmal</span></label>
+              <label class="ms-option"><input type="checkbox" value="Kpr Projections" checked><span>Kpr Projections</span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="list-filter-actions">
+        <button type="button" class="list-filter-apply" id="applyProductsLocation"><i class="fa-solid fa-filter"></i> Apply</button>
+        <button type="button" class="list-filter-reset" id="resetProductsLocation"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+      </div>
+    </div>
+    <div class="table-container products-list-table-wrap">
+      <table class="data-table products-list-table">
+        <thead><tr><th>Product Name</th><th class="text-right">Quantity</th></tr></thead>
+        <tbody id="productsListBody">
+          <tr><td colspan="2" class="products-empty">Select a location</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-footer" id="productsFooter">No location selected</div>
+  </aside>
+
+  <section class="party-details-panel products-detail-panel" aria-label="Selected product details">
+    <header class="details-header">
+      <div class="party-title">
+        <div class="avatar products-avatar" id="selectedProductAvatar">P</div>
+        <div>
+          <h2><span id="selectedProductHeading">Select a product</span></h2>
+          <p id="selectedProductSubheading">Choose a location and product to see its details.</p>
+        </div>
+      </div>
+    </header>
+    <div class="tab-toolbar products-detail-toolbar">
+      <strong>Product Details</strong>
+    </div>
+    <div class="table-container products-detail-table-wrap">
+      <table class="data-table products-detail-table">
+        <thead>
+          <tr>
+            <th>Item</th><th>Item Code</th><th>Category</th>
+            <th class="text-right">Sale Price</th><th class="text-right">Wholesale Price</th>
+            <th class="text-right">Purchase Price</th><th class="text-right">Stock</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="productDetailBody">
+          <tr><td colspan="8" class="products-empty">No product selected.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="modal-overlay products-modal-overlay" id="productModal" style="display:none;">
+    <section class="payment-modal products-modal" role="dialog" aria-modal="true" aria-labelledby="productModalTitle">
+      <header class="modal-header">
+        <div><h2 id="productModalTitle">Add Product</h2><p>Enter product details and location-wise stock</p></div>
+        <button class="modal-close" id="closeProductModal" type="button" title="Close" aria-label="Close">×</button>
+      </header>
+      <form id="productForm">
+        <input type="hidden" id="productId">
+        <div class="form-grid products-form-grid" style="padding:20px;">
+          <div class="form-group"><label for="productName">Product Name <span class="products-required">*</span></label><input type="text" id="productName" required maxlength="160" autocomplete="off"></div>
+          <div class="form-group"><label for="productCode">Item Code</label><input type="text" id="productCode" maxlength="80" autocomplete="off"></div>
+          <div class="form-group"><label for="productCategory">Category</label><input type="text" id="productCategory" maxlength="100" autocomplete="off"></div>
+          <div class="form-group"><label for="productLocation">Location <span class="products-required">*</span></label><select id="productLocation" required>
+            <option value="">Select Location</option>
+            <option value="Arneel Industries Karodi">Arneel Industries Karodi</option>
+            <option value="Anil Industries Karodi">Anil Industries Karodi</option>
+            <option value="Anil Industries Ghanegoan">Anil Industries Ghanegoan</option>
+            <option value="Anil Industries Yavatmal">Anil Industries Yavatmal</option>
+            <option value="Kpr Projections">Kpr Projections</option>
+          </select></div>
+          <div class="form-group"><label for="productSalePrice">Sale Price <span class="products-required">*</span></label><input type="number" id="productSalePrice" min="0" step="0.01" value="0" required></div>
+          <div class="form-group"><label for="productWholesalePrice">Wholesale Price <span class="products-required">*</span></label><input type="number" id="productWholesalePrice" min="0" step="0.01" value="0" required></div>
+          <div class="form-group"><label for="productPurchasePrice">Purchase Price <span class="products-required">*</span></label><input type="number" id="productPurchasePrice" min="0" step="0.01" value="0" required></div>
+          <div class="form-group"><label for="productStock">Stock / Quantity <span class="products-required">*</span></label><input type="number" id="productStock" min="0" step="0.01" value="0" required></div>
+        </div>
+        <div class="modal-footer products-modal-footer" style="padding:0 20px 20px;">
+          <button class="modal-cancel" id="cancelProductBtn" type="button">Cancel</button>
+          <button class="modal-save" type="submit">Save Product</button>
+        </div>
+      </form>
+    </section>
+  </div>
+</section>

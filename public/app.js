@@ -4,6 +4,7 @@
     const pages = [
         { name: 'dashboard',         fragment: 'dashboard.html',        script: 'dashboard.js' },
         { name: 'contractors',       fragment: 'contractor.html',       script: 'contractor.js' },
+        { name: 'products',          fragment: 'products.html',         script: 'products.js' },
         { name: 'attendance',        fragment: 'attendance.html',       script: 'attendance.js'  },
         { name: 'users',             fragment: 'users.html',            script: 'users.js'       },
         { name: 'sale',              fragment: 'sale.html',             script: 'sale.js'        },
@@ -339,6 +340,41 @@
             // 1) Set sidebar name FIRST — before any fragment renders.
             const user = session.user || {};
             setSidebarUserName(user.full_name || 'User');
+            window.is2User = user;
+            function filterLocationControls() {
+                if (user.role === 'Super Admin') return;
+                const allowedLocations = new Set((user.locations || []).map((location) => String(location).toLowerCase()));
+                document.querySelectorAll('#pageHost option, #pageHost input[type="checkbox"][value]').forEach((control) => {
+                    const value = String(control.value || control.textContent || '').trim();
+                    if (!value || !['arneel industries karodi', 'anil industries karodi', 'anil industries ghanegoan', 'anil industries yavatmal', 'kpr projections'].includes(value.toLowerCase())) return;
+                    if (allowedLocations.has(value.toLowerCase())) return;
+                    if (control.tagName === 'OPTION') control.remove();
+                    else if (control.closest('label')) control.closest('label').remove();
+                });
+            }
+            window.is2CanAccess = (moduleName, action = 'view') => {
+                if (user.role === 'Super Admin') return true;
+                const rights = user.permissions?.[moduleName] || {};
+                return Boolean(rights.all || rights[action]);
+            };
+            const pageModules = {
+                dashboard: 'dashboard', contractors: 'contractors', products: 'products',
+                attendance: 'attendance', sale: 'sale', estimate: 'estimate',
+                purchase: 'purchase', reports: 'reports', 'daily-stocks': 'daily-stocks',
+                'stock-transfer': 'stock-transfer', 'inventory-report': 'inventory-report',
+                sharewithCA: 'sharewithCA', settings: 'settings'
+            };
+            document.querySelectorAll('.nav-links li[data-page]').forEach((item) => {
+                const moduleName = pageModules[item.dataset.page];
+                item.hidden = item.dataset.page === 'users'
+                    ? user.role !== 'Super Admin'
+                    : !moduleName || !window.is2CanAccess(moduleName, 'view');
+            });
+            document.querySelectorAll('.nav-links .nav-group').forEach((group) => {
+                const visibleChild = Array.from(group.querySelectorAll('.nav-submenu li[data-page]'))
+                    .some((item) => !item.hidden);
+                group.hidden = !visibleChild;
+            });
 
             // 2) Load all fragments
             const fragments = await Promise.all(pages.map(async (page) => {
@@ -347,6 +383,7 @@
                 return response.text();
             }));
             host.innerHTML = fragments.join('\n');
+            filterLocationControls();
 
             // 3) Deduplicate .page-view
             const seen = new Set();
@@ -366,6 +403,7 @@
 
             // 5) Init controllers
             if (typeof window.initContractorPage === 'function')      window.initContractorPage();
+            if (typeof window.initProductsPage === 'function')        window.initProductsPage();
             if (typeof window.initUsersPage === 'function')           window.initUsersPage();
             if (typeof window.initSalePage === 'function')            window.initSalePage();
             if (typeof window.initEstimatePage === 'function')        window.initEstimatePage();
@@ -377,6 +415,7 @@
             if (typeof window.initInventoryReportPage === 'function') window.initInventoryReportPage();
             if (typeof window.initShareWithCAPage === 'function')     window.initShareWithCAPage();
             if (typeof window.initSettingsPage === 'function')          window.initSettingsPage();    
+            filterLocationControls();
 
             // 6) Logout
             const logoutBtn = document.querySelector('#logoutBtn');
@@ -393,9 +432,12 @@
             initSidebarCollapse();
 
             // 8) Land on dashboard, unless the refresh button was used.
-            const initialPage = refreshPage && document.querySelector(`.page-view[data-page="${refreshPage}"]`)
+            const accessiblePages = Array.from(document.querySelectorAll('.nav-links li[data-page]'))
+                .filter((item) => !item.hidden)
+                .map((item) => item.dataset.page);
+            const initialPage = refreshPage && accessiblePages.includes(refreshPage)
                 ? refreshPage
-                : 'dashboard';
+                : accessiblePages.includes('dashboard') ? 'dashboard' : accessiblePages[0];
             if (document.querySelector(`.page-view[data-page="${initialPage}"]`)) {
                 showPage(initialPage);
             } else {

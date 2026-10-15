@@ -5,9 +5,9 @@
             <i class="fa-solid fa-user-shield"></i>
             Users &amp; Access
         </h1>
-            <p>Manage user accounts, roles, and account access.</p>
+            <p>Manage user accounts, page rights, locations, and rate-card access.</p>
         </div>
-        <button class="users-primary-btn" id="addUserBtn" type="button"><i class="fa-solid fa-plus"></i> Add New User</button>
+        <button class="users-primary-btn" id="addUserBtn" type="button" hidden><i class="fa-solid fa-plus"></i> Add New User</button>
     </header>
 
     <section class="users-content">
@@ -16,7 +16,7 @@
         </div>
         <div class="users-table-wrap">
             <table class="users-table">
-                <thead><tr><th>ID</th><th>Full Name</th><th>Mobile Number</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+                <thead><tr><th>ID</th><th>Full Name</th><th>Mobile Number</th><th>Role</th><th>Locations</th><th>Rate Card</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody id="usersTableBody"></tbody>
             </table>
         </div>
@@ -35,7 +35,21 @@
                     <div class="form-group full-width"><label for="userFullName">Full Name</label><input id="userFullName" type="text" placeholder="Enter full name" required></div>
                     <div class="form-group"><label for="userMobileNumber">Mobile Number</label><input id="userMobileNumber" type="tel" maxlength="10" placeholder="Enter 10-digit mobile" required></div>
                     <div class="form-group"><label for="userRole">Role</label><select id="userRole" required><option value="Admin">Admin</option><option value="Employee">Employee</option></select></div>
-                    <div class="form-group full-width"><label for="userIsActive">Status</label><select id="userIsActive" required><option value="1">Active</option><option value="0">Inactive</option></select></div>
+                    <div class="form-group"><label for="userIsActive">Status</label><select id="userIsActive" required><option value="1">Active</option><option value="0">Inactive</option></select></div>
+                    <section class="user-access-section full-width" id="userAccessSection">
+                        <div class="user-access-heading"><h3>Page Access</h3><p>Choose which actions this user can perform in each module.</p></div>
+                        <div class="user-permissions-wrap">
+                            <table class="user-permissions-table">
+                                <thead><tr><th>Module</th><th><i class="fa-regular fa-eye"></i> View</th><th><i class="fa-regular fa-square-plus"></i> Create</th><th><i class="fa-regular fa-pen-to-square"></i> Edit</th><th><i class="fa-regular fa-trash-can"></i> Delete</th><th>All</th></tr></thead>
+                                <tbody id="userPermissionsBody"></tbody>
+                            </table>
+                        </div>
+                    </section>
+                    <section class="user-access-section full-width" id="userLocationsSection">
+                        <div class="user-access-heading"><h3>Location Access <span class="user-required">*</span></h3><p>Limit the locations and related records visible to this user.</p></div>
+                        <div class="user-location-grid" id="userLocationsGrid"></div>
+                    </section>
+                    <label class="user-rate-card full-width"><input type="checkbox" id="userRateCardAccess"><span><strong>Rate Card Access</strong><small>Allow viewing and managing contractor rate cards.</small></span></label>
                 </div>
                 <div class="modal-footer" style="padding:0 20px 20px;">
                     <button type="button" id="cancelUserBtn" class="modal-cancel">Cancel</button>

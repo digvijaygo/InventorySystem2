@@ -1004,7 +1004,12 @@ function bindEvents() {
     });
 
     // ---- Rate card modal ----
-    $('#rateCardBtn').addEventListener('click', () => openRateCardModal(state.selectedId));
+    const rateCardButton = $('#rateCardBtn');
+    const currentUser = window.is2User || {};
+    rateCardButton.hidden = currentUser.role !== 'Super Admin' && !currentUser.rate_card_access;
+    rateCardButton.addEventListener('click', () => {
+        if (!rateCardButton.hidden) openRateCardModal(state.selectedId);
+    });
     $('#closeRateCardModal').addEventListener('click', closeRateCardModal);
     $('#cancelRateCardBtn').addEventListener('click', closeRateCardModal);
     $('#rateCardContractor').addEventListener('change', event => loadRateHistory(event.target.value));

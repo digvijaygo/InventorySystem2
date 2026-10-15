@@ -73,12 +73,249 @@ function getSession(req) {
     return { token, ...session };
 }
 
+function parseAccessRecord(row) {
+    let permissions = {};
+    let locations = [];
+    try { permissions = JSON.parse(row.permissions || '{}'); } catch (error) {}
+    try { locations = JSON.parse(row.locations || '[]'); } catch (error) {}
+    return {
+        permissions: permissions && typeof permissions === 'object' ? permissions : {},
+        locations: Array.isArray(locations) ? locations : [],
+        rate_card_access: Number(row.rate_card_access) === 1
+    };
+}
+
 function requireAuth(req, res, next) {
     const session = getSession(req);
     if (!session) return res.status(401).json({ error: 'Authentication required' });
-    req.auth = session;
+    db.get(
+        `SELECT u.id, u.full_name, u.mobile_number, u.role, u.is_active,
+                a.permissions, a.locations, a.rate_card_access
+         FROM users u LEFT JOIN user_access a ON a.user_id = u.id WHERE u.id = ?`,
+        [session.user.id],
+        (err, user) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!user || Number(user.is_active) !== 1) return res.status(401).json({ error: 'Active user session required' });
+            req.auth = {
+                ...session,
+                user: { id: user.id, full_name: user.full_name, mobile_number: user.mobile_number, role: user.role },
+                access: parseAccessRecord(user)
+            };
+            next();
+        }
+    );
+}
+
+function requireSuperAdmin(req, res, next) {
+    requireAuth(req, res, () => {
+        if (req.auth.user.role !== 'Super Admin') return res.status(403).json({ error: 'Super Admin access required.' });
+        next();
+    });
+}
+
+function actionForRequest(req) {
+    if (req.method === 'GET' || req.method === 'HEAD') return 'view';
+    if (req.method === 'POST') return 'create';
+    if (req.method === 'PUT' || req.method === 'PATCH') return 'edit';
+    if (req.method === 'DELETE') return 'delete';
+    return 'view';
+}
+
+function authorizeModule(moduleKey) {
+    return function authorizeRequest(req, res, next) {
+        requireAuth(req, res, () => {
+            if (req.auth.user.role === 'Super Admin') return next();
+            const rights = req.auth.access.permissions[moduleKey] || {};
+            if (rights.all || rights[actionForRequest(req)]) return next();
+            return res.status(403).json({ error: `You do not have ${actionForRequest(req)} access to ${moduleKey}.` });
+        });
+    };
+}
+
+function userCan(req, moduleKey, action) {
+    if (req.auth.user.role === 'Super Admin') return true;
+    const rights = req.auth.access.permissions[moduleKey] || {};
+    return Boolean(rights.all || rights[action]);
+}
+
+function authorizeRateCards(req, res, next) {
+    requireAuth(req, res, () => {
+        if (req.auth.user.role === 'Super Admin') return next();
+        const rights = req.auth.access.permissions.contractors || {};
+        if (!req.auth.access.rate_card_access) return res.status(403).json({ error: 'Rate Card access is disabled.' });
+        if (!(rights.all || rights[actionForRequest(req)])) {
+            return res.status(403).json({ error: `You do not have ${actionForRequest(req)} access to contractor rate cards.` });
+        }
+        const contractorId = Number(req.params.id || (req.body && req.body.contractor_id));
+        const locations = req.auth.access.locations;
+        if (!contractorId || !locations.length) return res.status(403).json({ error: 'Rate Card is not available for the assigned locations.' });
+        db.get(
+            `SELECT COUNT(*) AS count FROM contractor_work_entries
+             WHERE contractor_id = ? AND LOWER(location) IN (${locations.map(() => '?').join(', ')})`,
+            [contractorId, ...locations.map((location) => location.toLowerCase())],
+            (err, row) => {
+                if (err) return res.status(500).json({ error: err.message });
+                if (!row || !Number(row.count)) return res.status(403).json({ error: 'Rate Card is not available for the assigned locations.' });
+                next();
+            }
+        );
+    });
+}
+
+function authorizeLocations(req, res, next) {
+    if (req.auth.user.role === 'Super Admin') {
+        req.allowedLocations = SUPPORTED_LOCATIONS;
+        const requested = req.query.location;
+        req.scopeLocation = Array.isArray(requested) ? requested[0] : requested || '';
+        return next();
+    }
+    const allowed = req.auth.access.locations;
+    if (!allowed.length) return res.status(403).json({ error: 'No locations have been assigned to this user.' });
+    const requested = req.query.location;
+    let scope = allowed;
+    if (requested !== undefined) {
+        const values = Array.isArray(requested) ? requested : [requested];
+        const allowedSet = new Set(allowed.map((location) => location.toLowerCase()));
+        const requestedAllowed = values.filter((value) => allowedSet.has(String(value).toLowerCase()));
+        scope = requestedAllowed.length ? requestedAllowed : allowed;
+    }
+    const queryLocations = [req.query.from_location, req.query.to_location].filter(Boolean);
+    const bodyLocations = [req.body && req.body.location, req.body && req.body.from_location, req.body && req.body.to_location]
+        .filter(Boolean);
+    if (Array.isArray(req.body && req.body.locations)) bodyLocations.push(...req.body.locations);
+    if (Array.isArray(req.body && req.body.entries)) {
+        req.body.entries.forEach((entry) => { if (entry && entry.location) bodyLocations.push(entry.location); });
+    }
+    const bodyAndQueryLocations = [...queryLocations, ...bodyLocations];
+    if (bodyAndQueryLocations.some((value) => !allowed.some((location) => location.toLowerCase() === String(value).toLowerCase()))) {
+        return res.status(403).json({ error: 'Request could not be completed.' });
+    }
+    req.allowedLocations = scope;
+    req.scopeLocation = scope[0] || '';
     next();
 }
+
+function authorizePurchaseSales(req, res, next) {
+    requireAuth(req, res, () => {
+        const action = actionForRequest(req);
+        if (req.auth.user.role === 'Super Admin') {
+            req.allowedTransactionTypes = ['Sale', 'Purchase'];
+            return authorizeLocations(req, res, next);
+        }
+        if (action === 'view') {
+            req.allowedTransactionTypes = [
+                userCan(req, 'sale', 'view') ? 'Sale' : null,
+                userCan(req, 'purchase', 'view') ? 'Purchase' : null
+            ].filter(Boolean);
+            if (req.allowedTransactionTypes.length) return authorizeLocations(req, res, next);
+            return res.status(403).json({ error: 'You do not have view access to sales or purchases.' });
+        }
+        const transactionType = req.body && req.body.transaction_type;
+        const continueWithType = (type) => {
+            const moduleKey = type === 'Purchase' ? 'purchase' : 'sale';
+            if (!userCan(req, moduleKey, action)) return res.status(403).json({ error: `You do not have ${action} access to ${moduleKey}.` });
+            if (action === 'create' && !(req.body && req.body.location)) return res.status(400).json({ error: 'Location is required.' });
+            req.allowedTransactionTypes = [type];
+            authorizeLocations(req, res, next);
+        };
+        if (req.method === 'POST') {
+            if (transactionType !== 'Sale' && transactionType !== 'Purchase') return res.status(400).json({ error: 'Transaction type is required.' });
+            return continueWithType(transactionType);
+        }
+        if (req.method === 'DELETE' || req.method === 'PUT') {
+            return db.get(`SELECT transaction_type, location FROM purchase_sales WHERE id = ?`, [req.params.id], (err, row) => {
+                if (err) return res.status(500).json({ error: err.message });
+                if (!row) return res.status(404).json({ error: 'Transaction not found.' });
+                const locations = req.auth.access.locations;
+                if (!locations.some((location) => location.toLowerCase() === String(row.location || '').toLowerCase())) {
+                    return res.status(403).json({ error: 'You do not have access to this transaction location.' });
+                }
+                if (req.method === 'PUT' && transactionType !== row.transaction_type) {
+                    return res.status(403).json({ error: 'A transaction cannot be changed between Sale and Purchase.' });
+                }
+                if (req.method === 'PUT' && !(req.body && req.body.location)) return res.status(400).json({ error: 'Location is required.' });
+                continueWithType(row.transaction_type);
+            });
+        }
+        return res.status(400).json({ error: 'Transaction type is required.' });
+    });
+}
+
+function authorizeModuleWithLocations(moduleKey) {
+    return function authorizeRequest(req, res, next) {
+        authorizeModule(moduleKey)(req, res, () => authorizeLocations(req, res, next));
+    };
+}
+
+function authorizeContractorData(req, res, next) {
+    requireAuth(req, res, () => {
+        const action = actionForRequest(req);
+        const hasContractorRight = userCan(req, 'contractors', action);
+        const hasReportRight = action === 'view' && userCan(req, 'reports', 'view');
+        if (!hasContractorRight && !hasReportRight) {
+            return res.status(403).json({ error: `You do not have ${action} access to contractor data.` });
+        }
+        authorizeLocations(req, res, next);
+    });
+}
+
+function authorizeInventory(req, res, next) {
+    requireAuth(req, res, () => {
+        const action = actionForRequest(req);
+        const stockUpsert = req.baseUrl === '/api/daily-stocks' && req.method === 'POST';
+        const allowed = stockUpsert && req.auth.user.role !== 'Super Admin'
+            ? userCan(req, 'daily-stocks', 'create') && userCan(req, 'daily-stocks', 'edit')
+            : action === 'view'
+            ? userCan(req, 'daily-stocks', 'view') || userCan(req, 'inventory-report', 'view')
+            : userCan(req, 'daily-stocks', action);
+        if (!allowed) return res.status(403).json({ error: stockUpsert ? 'Daily stock updates require both create and edit access.' : `You do not have ${action} access to inventory data.` });
+        authorizeLocations(req, res, next);
+    });
+}
+
+function authorizeReportData(transactionModule) {
+    return function authorizeReportRequest(req, res, next) {
+        requireAuth(req, res, () => {
+            if (req.auth.user.role === 'Super Admin' ||
+                userCan(req, 'reports', 'view') || userCan(req, transactionModule, 'view')) {
+                return authorizeLocations(req, res, next);
+            }
+            return res.status(403).json({ error: 'Report view access is required.' });
+        });
+    };
+}
+
+function authorizeAttendance(req, res, next) {
+    requireAuth(req, res, () => {
+        if (req.auth.user.role === 'Super Admin') return authorizeLocations(req, res, next);
+        const rights = req.auth.access.permissions.attendance || {};
+        const allowed = rights.all || (req.method === 'POST' ? rights.create && rights.edit : rights[actionForRequest(req)]);
+        if (!allowed) return res.status(403).json({ error: 'Attendance bulk updates require both create and edit access.' });
+        authorizeLocations(req, res, next);
+    });
+}
+
+app.use('/api/contractor-payments', authorizeContractorData);
+app.use('/api/contractor-payment-contractors', authorizeModuleWithLocations('contractors'));
+app.use('/api/contractor-rate-cards', authorizeRateCards);
+app.use('/api/products', authorizeModuleWithLocations('products'));
+app.use('/api/purchase-sales', authorizePurchaseSales);
+app.use('/api/estimates', authorizeModuleWithLocations('estimate'));
+app.use('/api/sale-reports', authorizeReportData('sale'));
+app.use('/api/purchase-reports', authorizeReportData('purchase'));
+app.use('/api/attendance-employees', authorizeAttendance);
+app.use('/api/daily-stock-categories', authorizeInventory);
+app.use('/api/daily-stock-subcategories', authorizeInventory);
+app.use('/api/daily-stocks', authorizeInventory);
+app.use('/api/stock-transfers', authorizeModuleWithLocations('stock-transfer'));
+app.use('/api/dashboard-summary', authorizeModuleWithLocations('dashboard'));
+app.use('/api/dashboard-trend', authorizeModuleWithLocations('dashboard'));
+app.use('/api/top-selling', authorizeModuleWithLocations('dashboard'));
+app.use('/api/dashboard-low-stock', authorizeModuleWithLocations('dashboard'));
+app.use('/api/dashboard-monthly-stats', authorizeModuleWithLocations('dashboard'));
+app.use('/api/ca/config', authorizeModule('sharewithCA'));
+app.use('/api/ca/share', authorizeModuleWithLocations('sharewithCA'));
+app.use('/api/backup', authorizeModule('settings'));
 
 function getTodayLocalISO() {
     const now = new Date();
@@ -120,6 +357,17 @@ db.serialize(() => {
     )`);
     db.run(`INSERT OR IGNORE INTO users (full_name, mobile_number, role, is_active)
         VALUES ('System Administrator', '9999999999', 'Admin', 1)`);
+    db.run(`UPDATE users SET role = 'Admin' WHERE role = 'Super Admin' AND mobile_number <> '9999999999'`);
+    db.run(`UPDATE users SET role = 'Super Admin', is_active = 1 WHERE mobile_number = '9999999999'`);
+    db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_single_super_admin ON users(role) WHERE role = 'Super Admin'`);
+    db.run(`CREATE TABLE IF NOT EXISTS user_access (
+        user_id INTEGER PRIMARY KEY,
+        permissions TEXT NOT NULL DEFAULT '{}',
+        locations TEXT NOT NULL DEFAULT '[]',
+        rate_card_access INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`);
 
     /* ---------- DAILY STOCK CATEGORIES ---------- */
     db.run(`CREATE TABLE IF NOT EXISTS daily_stock_categories (
@@ -263,6 +511,21 @@ db.serialize(() => {
         location TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
+
+    /* ---------- PRODUCTS ---------- */
+    db.run(`CREATE TABLE IF NOT EXISTS products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_name TEXT NOT NULL,
+        item_code TEXT,
+        category TEXT,
+        sale_price REAL NOT NULL DEFAULT 0,
+        wholesale_price REAL NOT NULL DEFAULT 0,
+        purchase_price REAL NOT NULL DEFAULT 0,
+        stock REAL NOT NULL DEFAULT 0,
+        location TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_products_location_name ON products(location, product_name)`);
 
     /* ---------- ESTIMATES / QUOTATIONS ---------- */
 db.run(`CREATE TABLE IF NOT EXISTS estimates (
@@ -421,9 +684,9 @@ app.get('/api/contractor-payments', (req, res) => {
 
     const hasFrom     = fromDate && isValidDateString(fromDate);
     const hasTo       = toDate   && isValidDateString(toDate);
-    const locationList = Array.isArray(location)
+    const locationList = req.allowedLocations || (Array.isArray(location)
         ? location.map(l => String(l).trim()).filter(Boolean)
-        : (location ? [String(location).trim()].filter(Boolean) : []);
+        : (location ? [String(location).trim()].filter(Boolean) : []));
     const hasLocation = locationList.length > 0;
     const hasEntryFilters = Boolean(hasLocation || hasFrom || hasTo);
     const trimmedSearch = (search && String(search).trim()) || '';
@@ -620,19 +883,35 @@ app.get('/api/contractor-payments', (req, res) => {
 
     db.all(sql, finalParams, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ rows: rows || [] });
+        const scopedRows = rows || [];
+        if (req.auth.user.role !== 'Super Admin' && req.allowedLocations.length < SUPPORTED_LOCATIONS.length) {
+            scopedRows.forEach((row) => {
+                row.total_payment = 0;
+                row.balance_payable = Number(row.total_amount) || 0;
+                row.payment_status = row.balance_payable > 0.005 ? 'UNPAID' : 'PAID';
+            });
+        }
+        res.json({ rows: scopedRows });
     });
 });
 
 app.get('/api/contractor-payment-contractors', (req, res) => {
-    db.all(`SELECT id, contractor_name FROM contractors ORDER BY contractor_name`, [], (err, rows) => {
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+    db.all(`SELECT DISTINCT c.id, c.contractor_name FROM contractors c
+        INNER JOIN contractor_work_entries e ON e.contractor_id = c.id
+        WHERE LOWER(e.location) IN (${locations.map(() => '?').join(', ')})
+        ORDER BY c.contractor_name`, locations.map((location) => location.toLowerCase()), (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows || []);
     });
 });
 
 app.get('/api/contractor-payments/:id', (req, res) => {
-    db.get(`SELECT * FROM contractors WHERE id=?`, [req.params.id], (err, row) => {
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+    db.get(`SELECT c.* FROM contractors c WHERE c.id=? AND EXISTS (
+        SELECT 1 FROM contractor_work_entries e WHERE e.contractor_id = c.id
+            AND LOWER(e.location) IN (${locations.map(() => '?').join(', ')})
+    )`, [req.params.id, ...locations.map((location) => location.toLowerCase())], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ error: 'Not found' });
         res.json(row);
@@ -682,6 +961,9 @@ app.post('/api/contractor-payments', (req, res) => {
 app.put('/api/contractor-payments/:id', (req, res) => {
     const id = req.params.id;
     const b = req.body || {};
+    if (req.auth.user.role !== 'Super Admin' && req.allowedLocations.length < SUPPORTED_LOCATIONS.length) {
+        return res.status(403).json({ error: 'Contractor-wide changes require access to all locations.' });
+    }
     const name = String(b.contractor_name || '').trim();
     if (!name) return res.status(400).json({ error: 'contractor_name required' });
 
@@ -720,6 +1002,9 @@ app.put('/api/contractor-payments/:id', (req, res) => {
 
 app.delete('/api/contractor-payments/:id', (req, res) => {
     const id = req.params.id;
+    if (req.auth.user.role !== 'Super Admin' && req.allowedLocations.length < SUPPORTED_LOCATIONS.length) {
+        return res.status(403).json({ error: 'Deleting a contractor requires access to all locations.' });
+    }
     db.run(`DELETE FROM contractor_work_entries WHERE contractor_id=?`, [id], () => {
         db.run(`DELETE FROM contractor_payments WHERE contractor_id=?`, [id], () => {
             db.run(`DELETE FROM contractor_rate_cards WHERE contractor_id=?`, [id], () => {
@@ -736,8 +1021,10 @@ app.delete('/api/contractor-payments/:id', (req, res) => {
    API: WORK ENTRIES
 ============================================================ */
 app.get('/api/contractor-payments/:id/entries', (req, res) => {
-    db.all(`SELECT * FROM contractor_work_entries WHERE contractor_id=? ORDER BY entry_date DESC, id DESC`,
-        [req.params.id], (err, rows) => {
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+    db.all(`SELECT * FROM contractor_work_entries WHERE contractor_id=?
+        AND LOWER(location) IN (${locations.map(() => '?').join(', ')}) ORDER BY entry_date DESC, id DESC`,
+        [req.params.id, ...locations.map((location) => location.toLowerCase())], (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json(rows || []);
         });
@@ -759,13 +1046,14 @@ app.post('/api/contractor-payments/:id/entries', (req, res) => {
 
 app.put('/api/contractor-payments/:id/entries/:entryId', (req, res) => {
     const b = req.body || {};
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
     db.run(`UPDATE contractor_work_entries SET
         location=?, entry_date=?,
         fabrication=?, cement_sheet=?, electrical=?, tiles=?,
         plumbing=?, door_fitting=?, outer_colour=?, inner_colour=?
-        WHERE id=? AND contractor_id=?`,
+        WHERE id=? AND contractor_id=? AND LOWER(location) IN (${locations.map(() => '?').join(', ')})`,
         [b.location || '', b.entry_date || null, ...WORK_KEYS.map(k => n(b[k])),
-         req.params.entryId, req.params.id],
+         req.params.entryId, req.params.id, ...locations.map((location) => location.toLowerCase())],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ ok: true });
@@ -773,8 +1061,10 @@ app.put('/api/contractor-payments/:id/entries/:entryId', (req, res) => {
 });
 
 app.delete('/api/contractor-payments/:id/entries/:entryId', (req, res) => {
-    db.run(`DELETE FROM contractor_work_entries WHERE id=? AND contractor_id=?`,
-        [req.params.entryId, req.params.id], function (err) {
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+    db.run(`DELETE FROM contractor_work_entries WHERE id=? AND contractor_id=?
+        AND LOWER(location) IN (${locations.map(() => '?').join(', ')})`,
+        [req.params.entryId, req.params.id, ...locations.map((location) => location.toLowerCase())], function (err) {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ ok: true });
         });
@@ -784,6 +1074,9 @@ app.delete('/api/contractor-payments/:id/entries/:entryId', (req, res) => {
    API: PAYMENTS
 ============================================================ */
 app.get('/api/contractor-payments/:id/transactions', (req, res) => {
+    if (req.auth.user.role !== 'Super Admin' && req.allowedLocations.length < SUPPORTED_LOCATIONS.length) {
+        return res.json({ dayWise: [] });
+    }
     db.all(`SELECT * FROM contractor_payments WHERE contractor_id=? ORDER BY payment_date DESC, id DESC`,
         [req.params.id], (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
@@ -801,6 +1094,9 @@ app.get('/api/contractor-payments/:id/transactions', (req, res) => {
 
 app.post('/api/contractor-payments/:id/payments', (req, res) => {
     const b = req.body || {};
+    if (req.auth.user.role !== 'Super Admin' && req.allowedLocations.length < SUPPORTED_LOCATIONS.length) {
+        return res.status(403).json({ error: 'Contractor payments are not location-specific and require access to all locations.' });
+    }
     const cid = req.params.id;
     db.run(`INSERT INTO contractor_payments
         (contractor_id, payment_date, payment_amount, payment_mode, paid_by, remarks)
@@ -816,6 +1112,9 @@ app.post('/api/contractor-payments/:id/payments', (req, res) => {
 });
 
 app.put('/api/contractor-payments/:id/payments/:paymentId', (req, res) => {
+    if (req.auth.user.role !== 'Super Admin' && req.allowedLocations.length < SUPPORTED_LOCATIONS.length) {
+        return res.status(403).json({ error: 'Contractor payments are not location-specific and require access to all locations.' });
+    }
     const b = req.body || {};
     const cid = req.params.id;
     db.run(`UPDATE contractor_payments SET
@@ -834,6 +1133,9 @@ app.put('/api/contractor-payments/:id/payments/:paymentId', (req, res) => {
 });
 
 app.delete('/api/contractor-payments/:id/payments/:paymentId', (req, res) => {
+    if (req.auth.user.role !== 'Super Admin' && req.allowedLocations.length < SUPPORTED_LOCATIONS.length) {
+        return res.status(403).json({ error: 'Contractor payments are not location-specific and require access to all locations.' });
+    }
     const cid = req.params.id;
     db.run(`DELETE FROM contractor_payments WHERE id=? AND contractor_id=?`,
         [req.params.paymentId, cid], function (err) {
@@ -901,10 +1203,133 @@ app.post('/api/contractor-rate-cards', (req, res) => {
 });
 
 /* ============================================================
+   API: PRODUCTS
+============================================================ */
+function getProductLocation(value) {
+    const location = normalizeLocationName(value).toLowerCase();
+    return SUPPORTED_LOCATIONS.find((supported) => supported.toLowerCase() === location) || '';
+}
+
+function readProductPayload(body) {
+    const productName = String(body.product_name || '').trim();
+    const location = getProductLocation(body.location);
+    const numericFields = ['sale_price', 'wholesale_price', 'purchase_price', 'stock'];
+    const values = {};
+
+    if (!productName) return { error: 'Product name is required.' };
+    if (!location) return { error: 'Select a valid location.' };
+    for (const field of numericFields) {
+        const value = Number(body[field]);
+        if (!Number.isFinite(value) || value < 0) return { error: `${field.replaceAll('_', ' ')} must be zero or greater.` };
+        values[field] = value;
+    }
+
+    return {
+        values: [
+            productName,
+            String(body.item_code || '').trim() || null,
+            String(body.category || '').trim() || null,
+            values.sale_price,
+            values.wholesale_price,
+            values.purchase_price,
+            values.stock,
+            location
+        ]
+    };
+}
+
+app.get('/api/products', (req, res) => {
+    const rawLocations = req.allowedLocations || (Array.isArray(req.query.location) ? req.query.location : [req.query.location]);
+    const locations = [...new Set(rawLocations.map(getProductLocation).filter(Boolean))];
+    if (!locations.length || locations.length !== new Set(rawLocations.filter(Boolean)).size) {
+        return res.status(400).json({ error: 'Select at least one valid location.' });
+    }
+
+    const search = String(req.query.search || '').trim();
+    const params = [...locations];
+    let searchSql = '';
+    if (search) {
+        searchSql = ' AND (product_name LIKE ? OR item_code LIKE ? OR category LIKE ?)';
+        const term = `%${search}%`;
+        params.push(term, term, term);
+    }
+
+    db.all(
+        `SELECT id, product_name, item_code, category, sale_price, wholesale_price,
+                purchase_price, stock, location
+         FROM products WHERE location IN (${locations.map(() => '?').join(', ')})${searchSql}
+         ORDER BY product_name COLLATE NOCASE ASC, id ASC`,
+        params,
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ rows: rows || [] });
+        }
+    );
+});
+
+app.post('/api/products', (req, res) => {
+    const parsed = readProductPayload(req.body || {});
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+
+    db.run(
+        `INSERT INTO products
+            (product_name, item_code, category, sale_price, wholesale_price, purchase_price, stock, location)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        parsed.values,
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.status(201).json({ id: this.lastID });
+        }
+    );
+});
+
+app.put('/api/products/:id', (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid product id.' });
+    const parsed = readProductPayload(req.body || {});
+    if (parsed.error) return res.status(400).json({ error: parsed.error });
+
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+    db.run(
+        `UPDATE products SET product_name = ?, item_code = ?, category = ?, sale_price = ?,
+            wholesale_price = ?, purchase_price = ?, stock = ?, location = ?
+         WHERE id = ? AND LOWER(location) IN (${locations.map(() => '?').join(', ')})`,
+        [...parsed.values, id, ...locations.map((location) => location.toLowerCase())],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!this.changes) return res.status(404).json({ error: 'Product not found.' });
+            res.json({ ok: true });
+        }
+    );
+});
+
+app.delete('/api/products/:id', (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid product id.' });
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+    db.run(`DELETE FROM products WHERE id = ? AND LOWER(location) IN (${locations.map(() => '?').join(', ')})`,
+        [id, ...locations.map((location) => location.toLowerCase())], function (err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!this.changes) return res.status(404).json({ error: 'Product not found.' });
+        res.json({ ok: true });
+    });
+});
+
+/* ============================================================
    API: PURCHASE & SALES
 ============================================================ */
 app.get('/api/purchase-sales', (req, res) => {
-    db.all(`SELECT * FROM purchase_sales ORDER BY invoice_date DESC, id DESC`, [], (err, rows) => {
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+    const transactionTypes = req.allowedTransactionTypes || ['Sale', 'Purchase'];
+    if (!locations.length || !transactionTypes.length) return res.json([]);
+    const locationSql = locations.map(() => '?').join(', ');
+    const typeSql = transactionTypes.map(() => '?').join(', ');
+    db.all(
+        `SELECT * FROM purchase_sales
+         WHERE LOWER(location) IN (${locationSql}) AND transaction_type IN (${typeSql})
+         ORDER BY invoice_date DESC, id DESC`,
+        [...locations.map((location) => location.toLowerCase()), ...transactionTypes],
+        (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows || []);
     });
@@ -980,7 +1405,7 @@ app.put('/api/purchase-sales/:id', (req, res) => {
         cgst_percent=?, cgst_amount=?, sgst_percent=?, sgst_amount=?,
         igst_percent=?, igst_amount=?, amount=?,
         delivery=?, dc_number=?, ewaybill=?, location=?
-        WHERE id=?`;
+        WHERE id=? AND LOWER(location) IN (${(req.allowedLocations || SUPPORTED_LOCATIONS).map(() => '?').join(', ')})`;
 
     const params = [
         b.transaction_type, b.invoice_date, b.invoice_number,
@@ -990,7 +1415,8 @@ app.put('/api/purchase-sales/:id', (req, res) => {
         igstPct, igstAmount, amount,
         b.delivery || null, b.dc_number || null, b.ewaybill || null,
         b.location || null,
-        id
+        id,
+        ...(req.allowedLocations || SUPPORTED_LOCATIONS).map((location) => location.toLowerCase())
     ];
 
     db.run(sql, params, function (err) {
@@ -1003,7 +1429,9 @@ app.put('/api/purchase-sales/:id', (req, res) => {
 app.delete('/api/purchase-sales/:id', (req, res) => {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid id' });
-    db.run(`DELETE FROM purchase_sales WHERE id=?`, [id], function (err) {
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+    db.run(`DELETE FROM purchase_sales WHERE id=? AND LOWER(location) IN (${locations.map(() => '?').join(', ')})`,
+        [id, ...locations.map((location) => location.toLowerCase())], function (err) {
         if (err) return res.status(500).json({ error: err.message });
         if (!this.changes) return res.status(404).json({ error: 'Transaction not found' });
         res.json({ ok: true });
@@ -1017,9 +1445,12 @@ app.delete('/api/purchase-sales/:id', (req, res) => {
 
 // GET all estimates
 app.get('/api/estimates', (req, res) => {
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+    if (!locations.length) return res.json([]);
     db.all(
-        `SELECT * FROM estimates ORDER BY invoice_date DESC, id DESC`,
-        [],
+        `SELECT * FROM estimates WHERE LOWER(location) IN (${locations.map(() => '?').join(', ')})
+         ORDER BY invoice_date DESC, id DESC`,
+        locations.map((location) => location.toLowerCase()),
         (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json(rows || []);
@@ -1029,7 +1460,9 @@ app.get('/api/estimates', (req, res) => {
 
 // GET one estimate
 app.get('/api/estimates/:id', (req, res) => {
-    db.get(`SELECT * FROM estimates WHERE id=?`, [req.params.id], (err, row) => {
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+    db.get(`SELECT * FROM estimates WHERE id=? AND LOWER(location) IN (${locations.map(() => '?').join(', ')})`,
+        [req.params.id, ...locations.map((location) => location.toLowerCase())], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ error: 'Estimate not found' });
         res.json(row);
@@ -1039,6 +1472,7 @@ app.get('/api/estimates/:id', (req, res) => {
 // POST create estimate
 app.post('/api/estimates', (req, res) => {
     const b = req.body || {};
+    if (req.auth.user.role !== 'Super Admin' && !b.location) return res.status(400).json({ error: 'Location is required.' });
     const required = ['invoice_date', 'invoice_number', 'bill_to', 'item_name', 'quantity', 'rate'];
     for (const field of required) {
         if (b[field] === undefined || b[field] === null || b[field] === '') {
@@ -1090,6 +1524,7 @@ app.put('/api/estimates/:id', (req, res) => {
     if (!id) return res.status(400).json({ error: 'Invalid id' });
 
     const b = req.body || {};
+    if (req.auth.user.role !== 'Super Admin' && !b.location) return res.status(400).json({ error: 'Location is required.' });
     const qty = n(b.quantity);
     const rate = n(b.rate);
     const gross = qty * rate;
@@ -1112,7 +1547,7 @@ app.put('/api/estimates/:id', (req, res) => {
             discount_percent=?, discount_amount=?,
             cgst_percent=?, cgst_amount=?, sgst_percent=?, sgst_amount=?,
             igst_percent=?, igst_amount=?, amount=?, location=?, remarks=?
-         WHERE id=?`,
+         WHERE id=? AND LOWER(location) IN (${(req.allowedLocations || SUPPORTED_LOCATIONS).map(() => '?').join(', ')})`,
         [
             b.invoice_date, b.invoice_number, b.bill_to, b.ship_to || null,
             b.item_name, qty, b.hsn_code || null, rate, taxable,
@@ -1120,7 +1555,8 @@ app.put('/api/estimates/:id', (req, res) => {
             cgstPct, cgstAmt, sgstPct, sgstAmt,
             igstPct, igstAmt, amount,
             b.location || null, b.remarks || null,
-            id
+            id,
+            ...(req.allowedLocations || SUPPORTED_LOCATIONS).map((location) => location.toLowerCase())
         ],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -1134,7 +1570,9 @@ app.put('/api/estimates/:id', (req, res) => {
 app.delete('/api/estimates/:id', (req, res) => {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid id' });
-    db.run(`DELETE FROM estimates WHERE id=?`, [id], function (err) {
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+    db.run(`DELETE FROM estimates WHERE id=? AND LOWER(location) IN (${locations.map(() => '?').join(', ')})`,
+        [id, ...locations.map((location) => location.toLowerCase())], function (err) {
         if (err) return res.status(500).json({ error: err.message });
         if (!this.changes) return res.status(404).json({ error: 'Estimate not found' });
         res.json({ ok: true });
@@ -1165,10 +1603,9 @@ app.get('/api/sale-reports', (req, res) => {
         params.push(`%${category}%`);
     }
 
-    if (location && String(location).trim()) {
-        where.push('LOWER(location) = ?');
-        params.push(String(location).trim().toLowerCase());
-    }
+    const locations = req.allowedLocations || (location ? (Array.isArray(location) ? location : [location]) : SUPPORTED_LOCATIONS);
+    where.push(`LOWER(location) IN (${locations.map(() => '?').join(', ')})`);
+    locations.forEach((value) => params.push(String(value).trim().toLowerCase()));
 
     const sql = `SELECT * FROM purchase_sales WHERE ${where.join(' AND ')} ORDER BY invoice_date DESC, id DESC`;
 
@@ -1219,10 +1656,9 @@ app.get('/api/purchase-reports', (req, res) => {
         params.push(`%${category}%`);
     }
 
-    if (location && String(location).trim()) {
-        where.push('LOWER(location) = ?');
-        params.push(String(location).trim().toLowerCase());
-    }
+    const locations = req.allowedLocations || (location ? (Array.isArray(location) ? location : [location]) : SUPPORTED_LOCATIONS);
+    where.push(`LOWER(location) IN (${locations.map(() => '?').join(', ')})`);
+    locations.forEach((value) => params.push(String(value).trim().toLowerCase()));
 
     const sql = `SELECT * FROM purchase_sales WHERE ${where.join(' AND ')} ORDER BY invoice_date DESC, id DESC`;
 
@@ -1250,7 +1686,12 @@ app.get('/api/purchase-reports', (req, res) => {
    API: ATTENDANCE EMPLOYEES
 ============================================================ */
 app.get('/api/attendance-employees', (req, res) => {
-    db.all(`SELECT * FROM attendance_employees ORDER BY id`, [], (err, empRows) => {
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+    if (!locations.length) return res.json([]);
+    const locationSql = locations.map(() => '?').join(', ');
+    db.all(`SELECT * FROM attendance_employees
+        WHERE LOWER(COALESCE(location, '')) IN (${locationSql}) ORDER BY id`,
+        locations.map((location) => location.toLowerCase()), (err, empRows) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!empRows || !empRows.length) return res.json([]);
 
@@ -1287,12 +1728,26 @@ app.get('/api/attendance-employees', (req, res) => {
 app.post('/api/attendance-employees/bulk', (req, res) => {
     const employees = Array.isArray(req.body && req.body.employees) ? req.body.employees : [];
     if (!employees.length) return res.json({ ok: true });
+    const allowedLocations = req.allowedLocations || SUPPORTED_LOCATIONS;
+    if (req.auth.user.role !== 'Super Admin' && employees.some((employee) =>
+        !allowedLocations.some((location) => location.toLowerCase() === String(employee.location || '').trim().toLowerCase()))) {
+        return res.status(403).json({ error: 'Attendance updates may only include employees at assigned locations.' });
+    }
 
     db.serialize(() => {
         db.run('BEGIN TRANSACTION');
 
-        db.run('DELETE FROM attendance_days');
-        db.run('DELETE FROM attendance_employees');
+        if (req.auth.user.role === 'Super Admin') {
+            db.run('DELETE FROM attendance_days');
+            db.run('DELETE FROM attendance_employees');
+        } else {
+            const allowedSql = allowedLocations.map(() => '?').join(', ');
+            const lowerLocations = allowedLocations.map((location) => location.toLowerCase());
+            db.run(`DELETE FROM attendance_days WHERE employee_id IN (
+                SELECT id FROM attendance_employees WHERE LOWER(COALESCE(location, '')) IN (${allowedSql})
+            )`, lowerLocations);
+            db.run(`DELETE FROM attendance_employees WHERE LOWER(COALESCE(location, '')) IN (${allowedSql})`, lowerLocations);
+        }
 
         const empStmt = db.prepare(`INSERT INTO attendance_employees
             (id, name, department, joining_date, paid, location) VALUES (?,?,?,?,?,?)`);
@@ -1366,9 +1821,9 @@ app.post('/api/auth/verify-otp', (req, res) => {
 });
 
 app.get('/api/auth/session', (req, res) => {
-    const session = getSession(req);
-    if (!session) return res.status(401).json({ error: 'No active session' });
-    res.json({ user: session.user });
+    requireAuth(req, res, () => {
+        res.json({ user: { ...req.auth.user, ...req.auth.access } });
+    });
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -1378,46 +1833,124 @@ app.post('/api/auth/logout', (req, res) => {
     res.json({ ok: true });
 });
 
-app.get('/api/users', requireAuth, (req, res) => {
-    db.all(`SELECT id, full_name, mobile_number, role, is_active, created_at FROM users ORDER BY id`, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows || []);
+const ACCESS_MODULES = [
+    'dashboard', 'sale', 'estimate', 'purchase', 'products', 'contractors',
+    'attendance', 'daily-stocks', 'stock-transfer', 'inventory-report',
+    'reports', 'sharewithCA', 'settings'
+];
+
+function sanitizeUserAccess(body) {
+    const permissions = {};
+    const inputPermissions = body.permissions && typeof body.permissions === 'object' ? body.permissions : {};
+    ACCESS_MODULES.forEach((moduleName) => {
+        const input = inputPermissions[moduleName] || {};
+        permissions[moduleName] = {
+            view: Boolean(input.view),
+            create: Boolean(input.create),
+            edit: Boolean(input.edit),
+            delete: Boolean(input.delete),
+            all: Boolean(input.all)
+        };
+    });
+    const locations = Array.isArray(body.locations)
+        ? [...new Set(body.locations.map(getProductLocation).filter(Boolean))]
+        : [];
+    return {
+        permissions: JSON.stringify(permissions),
+        locations: JSON.stringify(locations),
+        rateCardAccess: body.rate_card_access ? 1 : 0
+    };
+}
+
+function saveUserAccess(userId, access, callback) {
+    db.run(
+        `INSERT INTO user_access (user_id, permissions, locations, rate_card_access, updated_at)
+         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT(user_id) DO UPDATE SET permissions = excluded.permissions,
+             locations = excluded.locations, rate_card_access = excluded.rate_card_access,
+             updated_at = CURRENT_TIMESTAMP`,
+        [userId, access.permissions, access.locations, access.rateCardAccess],
+        callback
+    );
+}
+
+app.get('/api/users', requireSuperAdmin, (req, res) => {
+    db.all(
+        `SELECT u.id, u.full_name, u.mobile_number, u.role, u.is_active, u.created_at,
+                a.permissions, a.locations, a.rate_card_access
+         FROM users u LEFT JOIN user_access a ON a.user_id = u.id ORDER BY u.id`,
+        [],
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json((rows || []).map((row) => ({
+                id: row.id,
+                full_name: row.full_name,
+                mobile_number: row.mobile_number,
+                role: row.role,
+                is_active: row.is_active,
+                created_at: row.created_at,
+                ...parseAccessRecord(row)
+            })));
+        }
+    );
+});
+
+app.post('/api/users', requireSuperAdmin, (req, res) => {
+    const body = req.body || {};
+    const name = String(body.full_name || '').trim();
+    const mobile = String(body.mobile_number || '').replace(/\D/g, '').slice(0, 10);
+    if (!name || !/^\d{10}$/.test(mobile)) return res.status(400).json({ error: 'Valid name and mobile number are required.' });
+    const role = body.role === 'Admin' ? 'Admin' : 'Employee';
+    const access = sanitizeUserAccess(body);
+    db.run(`INSERT INTO users (full_name, mobile_number, role, is_active) VALUES (?,?,?,?)`,
+        [name, mobile, role, Number(body.is_active) === 0 ? 0 : 1],
+        function (err) {
+            if (err) return res.status(err.code === 'SQLITE_CONSTRAINT' ? 409 : 500).json({ error: err.code === 'SQLITE_CONSTRAINT' ? 'Mobile number is already registered.' : err.message });
+            const userId = this.lastID;
+            saveUserAccess(userId, access, (accessErr) => {
+                if (accessErr) return res.status(500).json({ error: accessErr.message });
+                res.status(201).json({ id: userId });
+            });
+        });
+});
+
+app.put('/api/users/:id', requireSuperAdmin, (req, res) => {
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId) || userId <= 0) return res.status(400).json({ error: 'Invalid user id.' });
+    const body = req.body || {};
+    const name = String(body.full_name || '').trim();
+    const mobile = String(body.mobile_number || '').replace(/\D/g, '').slice(0, 10);
+    if (!name || !/^\d{10}$/.test(mobile)) return res.status(400).json({ error: 'Valid name and mobile number are required.' });
+    const role = body.role === 'Admin' ? 'Admin' : 'Employee';
+    const access = sanitizeUserAccess(body);
+
+    db.get(`SELECT role FROM users WHERE id = ?`, [userId], (findErr, existing) => {
+        if (findErr) return res.status(500).json({ error: findErr.message });
+        if (!existing) return res.status(404).json({ error: 'User not found.' });
+        if (existing.role === 'Super Admin') return res.status(403).json({ error: 'The Super Admin account cannot be modified here.' });
+        db.run(`UPDATE users SET full_name=?, mobile_number=?, role=?, is_active=? WHERE id=?`,
+            [name, mobile, role, Number(body.is_active) === 0 ? 0 : 1, userId],
+            function (err) {
+                if (err) return res.status(err.code === 'SQLITE_CONSTRAINT' ? 409 : 500).json({ error: err.code === 'SQLITE_CONSTRAINT' ? 'Mobile number is already registered.' : err.message });
+                saveUserAccess(userId, access, (accessErr) => {
+                    if (accessErr) return res.status(500).json({ error: accessErr.message });
+                    res.json({ ok: true });
+                });
+            });
     });
 });
 
-app.post('/api/users', requireAuth, (req, res) => {
-    const b = req.body || {};
-    const name = String(b.full_name || '').trim();
-    const mobile = String(b.mobile_number || '').replace(/\D/g, '').slice(0, 10);
-    if (!name || !/^\d{10}$/.test(mobile)) return res.status(400).json({ error: 'Valid name and mobile number are required.' });
-    db.run(`INSERT INTO users (full_name, mobile_number, role, is_active) VALUES (?,?,?,?)`,
-        [name, mobile, b.role === 'Admin' ? 'Admin' : 'Employee', Number(b.is_active) === 0 ? 0 : 1],
-        function (err) {
-            if (err) return res.status(err.code === 'SQLITE_CONSTRAINT' ? 409 : 500).json({ error: err.code === 'SQLITE_CONSTRAINT' ? 'Mobile number is already registered.' : err.message });
-            res.status(201).json({ id: this.lastID });
-        });
-});
-
-app.put('/api/users/:id', requireAuth, (req, res) => {
-    const b = req.body || {};
-    const name = String(b.full_name || '').trim();
-    const mobile = String(b.mobile_number || '').replace(/\D/g, '').slice(0, 10);
-    if (!name || !/^\d{10}$/.test(mobile)) return res.status(400).json({ error: 'Valid name and mobile number are required.' });
-    db.run(`UPDATE users SET full_name=?, mobile_number=?, role=?, is_active=? WHERE id=?`,
-        [name, mobile, b.role === 'Admin' ? 'Admin' : 'Employee', Number(b.is_active) === 0 ? 0 : 1, req.params.id],
-        function (err) {
-            if (err) return res.status(err.code === 'SQLITE_CONSTRAINT' ? 409 : 500).json({ error: err.code === 'SQLITE_CONSTRAINT' ? 'Mobile number is already registered.' : err.message });
-            if (!this.changes) return res.status(404).json({ error: 'User not found' });
+app.delete('/api/users/:id', requireSuperAdmin, (req, res) => {
+    const userId = Number(req.params.id);
+    if (userId === Number(req.auth.user.id)) return res.status(400).json({ error: 'You cannot delete your current account.' });
+    db.get(`SELECT role FROM users WHERE id = ?`, [userId], (findErr, user) => {
+        if (findErr) return res.status(500).json({ error: findErr.message });
+        if (!user) return res.status(404).json({ error: 'User not found.' });
+        if (user.role === 'Super Admin') return res.status(403).json({ error: 'The Super Admin account cannot be deleted.' });
+        db.run(`DELETE FROM users WHERE id=?`, [userId], function (err) {
+            if (err) return res.status(500).json({ error: err.message });
             res.json({ ok: true });
         });
-});
-
-app.delete('/api/users/:id', requireAuth, (req, res) => {
-    if (Number(req.params.id) === Number(req.auth.user.id)) return res.status(400).json({ error: 'You cannot delete your current account.' });
-    db.run(`DELETE FROM users WHERE id=?`, [req.params.id], function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!this.changes) return res.status(404).json({ error: 'User not found' });
-        res.json({ ok: true });
     });
 });
 
@@ -1456,13 +1989,17 @@ app.post('/api/daily-stock-categories', (req, res) => {
 app.get('/api/daily-stock-subcategories', (req, res) => {
     const category = normalizeCategoryName(req.query.category);
     if (!category) return res.status(400).json({ error: 'Category is required.' });
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+    if (!locations.length) return res.json([]);
+    const locationSql = locations.map(() => '?').join(', ');
 
     db.all(
         `SELECT name FROM daily_stock_subcategories WHERE category_name = ?
          UNION
-         SELECT DISTINCT TRIM(size) AS name FROM daily_stocks WHERE category = ? AND TRIM(COALESCE(size, '')) != ''
+         SELECT DISTINCT TRIM(size) AS name FROM daily_stocks WHERE category = ?
+             AND LOWER(location) IN (${locationSql}) AND TRIM(COALESCE(size, '')) != ''
          ORDER BY name COLLATE NOCASE ASC`,
-        [category, category],
+        [category, category, ...locations.map((location) => location.toLowerCase())],
         (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json((rows || []).map((row) => ({ category_name: category, name: row.name })));
@@ -1488,12 +2025,11 @@ app.post('/api/daily-stock-subcategories', (req, res) => {
    API: DAILY STOCKS
 ============================================================ */
 app.get('/api/daily-stocks', (req, res) => {
-    const { date, category, location } = req.query;
+    const { date, category } = req.query;
     const normalizedCategory = normalizeCategoryName(category);
-    const normalizedLocation = normalizeLocationName(location);
-
-    if (!normalizedLocation) return res.status(400).json({ error: 'Location is required.' });
-    if (!isSupportedLocation(normalizedLocation)) return res.status(400).json({ error: 'Invalid location selected.' });
+    const locations = req.allowedLocations || (req.query.location ? [req.query.location] : []);
+    if (!locations.length) return res.status(400).json({ error: 'Location is required.' });
+    if (locations.some((location) => !isSupportedLocation(location))) return res.status(400).json({ error: 'Invalid location selected.' });
 
     const whereClauses = [];
     const params = [];
@@ -1507,8 +2043,8 @@ app.get('/api/daily-stocks', (req, res) => {
         whereClauses.push('category = ?');
         params.push(normalizedCategory);
     }
-    whereClauses.push('location = ?');
-    params.push(normalizedLocation);
+    whereClauses.push(`LOWER(location) IN (${locations.map(() => '?').join(', ')})`);
+    params.push(...locations.map((location) => location.toLowerCase()));
 
     const whereSql = whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
@@ -1606,9 +2142,10 @@ app.put('/api/daily-stocks/:id', (req, res) => {
     const resolvedCabinCount = Number.isFinite(cabinCount) && cabinCount > 0 ? Math.floor(cabinCount) : 20;
     const qtyForCount = qtyOne * resolvedCabinCount;
 
-    db.get('SELECT id, stock_date, category FROM daily_stocks WHERE id = ?', [rowId], (findErr, existingRow) => {
+    db.get('SELECT id, stock_date, category, location FROM daily_stocks WHERE id = ?', [rowId], (findErr, existingRow) => {
         if (findErr) return res.status(500).json({ error: findErr.message });
         if (!existingRow) return res.status(404).json({ error: 'Row not found.' });
+        if (!req.allowedLocations.some((location) => location.toLowerCase() === String(existingRow.location).toLowerCase())) return res.status(403).json({ error: 'You do not have access to this location.' });
         if (existingRow.stock_date !== getTodayLocalISO()) return res.status(403).json({ error: 'Past date is read-only. You can edit rows only for today.' });
 
         db.run(
@@ -1630,9 +2167,10 @@ app.delete('/api/daily-stocks/:id', (req, res) => {
     const rowId = Number(id);
     if (!Number.isInteger(rowId) || rowId <= 0) return res.status(400).json({ error: 'Invalid row id.' });
 
-    db.get('SELECT id, stock_date FROM daily_stocks WHERE id = ?', [rowId], (findErr, existingRow) => {
+    db.get('SELECT id, stock_date, location FROM daily_stocks WHERE id = ?', [rowId], (findErr, existingRow) => {
         if (findErr) return res.status(500).json({ error: findErr.message });
         if (!existingRow) return res.status(404).json({ error: 'Row not found.' });
+        if (!req.allowedLocations.some((location) => location.toLowerCase() === String(existingRow.location).toLowerCase())) return res.status(403).json({ error: 'You do not have access to this location.' });
         if (existingRow.stock_date !== getTodayLocalISO()) return res.status(403).json({ error: 'Past date is read-only. You can delete rows only for today.' });
 
         db.run('DELETE FROM daily_stocks WHERE id = ?', [rowId], function(deleteErr) {
@@ -1647,9 +2185,18 @@ app.delete('/api/daily-stocks/:id', (req, res) => {
    ============================================================ */
 app.get('/api/stock-transfers', (req, res) => {
     const { date, category, from_location, to_location, search } = req.query;
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
 
     const where = [];
     const params = [];
+
+    if (locations.length) {
+        const locationSql = locations.map(() => '?').join(', ');
+        where.push(`LOWER(from_location) IN (${locationSql}) AND LOWER(to_location) IN (${locationSql})`);
+        params.push(...locations.map((location) => location.toLowerCase()), ...locations.map((location) => location.toLowerCase()));
+    } else {
+        return res.json([]);
+    }
 
     if (date) {
         if (!isValidDateString(date)) return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
@@ -1808,6 +2355,11 @@ app.put('/api/stock-transfers/:id', (req, res) => {
         db.get(`SELECT * FROM stock_transfers WHERE id = ?`, [transferId], (findErr, old) => {
             if (findErr) { db.run('ROLLBACK'); return res.status(500).json({ error: findErr.message }); }
             if (!old) { db.run('ROLLBACK'); return res.status(404).json({ error: 'Transfer not found.' }); }
+            if (!req.allowedLocations.some((location) => location.toLowerCase() === old.from_location.toLowerCase()) ||
+                !req.allowedLocations.some((location) => location.toLowerCase() === old.to_location.toLowerCase())) {
+                db.run('ROLLBACK');
+                return res.status(403).json({ error: 'You do not have access to the original transfer locations.' });
+            }
             if (old.transfer_date !== getTodayLocalISO()) { db.run('ROLLBACK'); return res.status(403).json({ error: "Only today's transfers can be edited." }); }
 
             // Step 1: reverse old transfer
@@ -1911,6 +2463,11 @@ app.delete('/api/stock-transfers/:id', (req, res) => {
         db.get(`SELECT * FROM stock_transfers WHERE id = ?`, [transferId], (findErr, old) => {
             if (findErr) { db.run('ROLLBACK'); return res.status(500).json({ error: findErr.message }); }
             if (!old) { db.run('ROLLBACK'); return res.status(404).json({ error: 'Transfer not found.' }); }
+            if (!req.allowedLocations.some((location) => location.toLowerCase() === old.from_location.toLowerCase()) ||
+                !req.allowedLocations.some((location) => location.toLowerCase() === old.to_location.toLowerCase())) {
+                db.run('ROLLBACK');
+                return res.status(403).json({ error: 'You do not have access to the original transfer locations.' });
+            }
             if (old.transfer_date !== getTodayLocalISO()) { db.run('ROLLBACK'); return res.status(403).json({ error: "Only today's transfers can be deleted." }); }
 
             db.get(
@@ -2691,7 +3248,8 @@ app.get('/*splat', (req, res) => {
    ============================================================ */
 app.get('/api/dashboard-summary', (req, res) => {
     const { location } = req.query;
-    const loc = location && String(location).trim() ? String(location).trim() : '';
+    const scopedLocation = req.scopeLocation || location;
+    const loc = scopedLocation && String(scopedLocation).trim() ? String(scopedLocation).trim() : '';
     const locLower = loc.toLowerCase();
 
     // ---- Helper: run a scalar query ----
@@ -2829,8 +3387,9 @@ app.get('/api/dashboard-summary', (req, res) => {
    ========================================================= */
 app.get('/api/dashboard-trend', (req, res) => {
     try {
-        const location = req.query.location && String(req.query.location).trim()
-            ? String(req.query.location).trim().toLowerCase()
+        const scopedLocation = req.scopeLocation || req.query.location;
+        const location = scopedLocation && String(scopedLocation).trim()
+            ? String(scopedLocation).trim().toLowerCase()
             : '';
 
         const now = new Date();
@@ -2879,8 +3438,9 @@ app.get('/api/dashboard-trend', (req, res) => {
    ========================================================= */
 app.get('/api/top-selling', (req, res) => {
     try {
-        const location = req.query.location && String(req.query.location).trim()
-            ? String(req.query.location).trim().toLowerCase()
+        const scopedLocation = req.scopeLocation || req.query.location;
+        const location = scopedLocation && String(scopedLocation).trim()
+            ? String(scopedLocation).trim().toLowerCase()
             : '';
 
         const now = new Date();
@@ -2927,8 +3487,9 @@ app.get('/api/top-selling', (req, res) => {
    ========================================================= */
 app.get('/api/dashboard-low-stock', (req, res) => {
     try {
-        const location = req.query.location && String(req.query.location).trim()
-            ? String(req.query.location).trim()
+        const scopedLocation = req.scopeLocation || req.query.location;
+        const location = scopedLocation && String(scopedLocation).trim()
+            ? String(scopedLocation).trim()
             : '';
         const today = getTodayLocalISO();
         const THRESHOLD = 15;
@@ -2968,8 +3529,9 @@ app.get('/api/dashboard-low-stock', (req, res) => {
    ========================================================= */
 app.get('/api/dashboard-monthly-stats', (req, res) => {
     try {
-        const location = req.query.location && String(req.query.location).trim()
-            ? String(req.query.location).trim().toLowerCase()
+        const scopedLocation = req.scopeLocation || req.query.location;
+        const location = scopedLocation && String(scopedLocation).trim()
+            ? String(scopedLocation).trim().toLowerCase()
             : '';
 
         const now = new Date();

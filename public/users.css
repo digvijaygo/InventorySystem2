@@ -36,13 +36,14 @@
     cursor: pointer;
 }
 .users-primary-btn:hover { background: #0d4fa8; }
+.users-primary-btn[hidden] { display: none !important; }
 
 .users-content { background: #fff; border: 1px solid #e4e7ec; border-radius: 8px; box-shadow: 0 2px 8px rgba(16,24,40,.05); }
 .users-table-header { min-height: 55px; padding: 10px 14px; display: flex; align-items: center; border-bottom: 1px solid #eef0f4; }
 .users-table-header h2 { margin: 0; font-size: 14px; color: #17233f; }
 .users-table-header p { margin: 3px 0 0; color: #667085; font-size: 11px; }
 .users-table-wrap { overflow-x: auto; }
-.users-table { width: 100%; min-width: 760px; border-collapse: collapse; }
+.users-table { width: 100%; min-width: 980px; border-collapse: collapse; }
 .users-table th { padding: 10px 14px; text-align: left; color: #fff; background: #123d70; font-size: 10px; font-weight: 600; }
 .users-table td { padding: 10px 14px; border-bottom: 1px solid #edf0f4; color: #344054; font-size: 12px; }
 .users-table tbody tr:hover { background: #f8fbff; }
@@ -57,7 +58,46 @@
 .users-status-text { min-height: 18px; margin: 0; padding: 10px 14px; color: #1267d9; font-size: 11px; }
 .users-status-text.error { color: #d93035; }
 
+#userModal .payment-modal {
+    width: min(1120px, 100%);
+    max-height: calc(100vh - 40px);
+    overflow: auto;
+}
+
+.user-access-section { min-width: 0; }
+.user-access-heading { margin: 0 0 9px; }
+.user-access-heading h3 { margin: 0; color: #17233f; font-size: 13px; }
+.user-access-heading p { margin: 4px 0 0; color: #667085; font-size: 11px; }
+.user-required { color: #c43232; }
+.user-permissions-wrap { max-height: 275px; overflow-y: auto; border: 1px solid #e4e7ec; }
+.user-permissions-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; }
+.user-permissions-table th,
+.user-permissions-table td { padding: 7px 5px; border-bottom: 1px solid #edf0f4; text-align: center; }
+.user-permissions-table th { position: sticky; top: 0; z-index: 1; padding: 7px 4px; background: #f8f9fb; color: #475467; font-weight: 600; white-space: nowrap; }
+.user-permissions-table th:first-child,
+.user-permissions-table td:first-child { width: 30%; text-align: left; overflow-wrap: anywhere; }
+.user-permissions-table th:not(:first-child),
+.user-permissions-table td:not(:first-child) { width: 14%; }
+.user-permissions-table input[type="checkbox"],
+.user-location-grid input[type="checkbox"],
+.user-rate-card input[type="checkbox"] { width: 15px; height: 15px; accent-color: #1769d2; vertical-align: middle; }
+.user-module-icon { display: inline-flex; width: 19px; color: #1769d2; }
+.user-location-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 12px; }
+.user-location-option,
+.user-rate-card { display: flex; align-items: center; gap: 8px; color: #344054; font-size: 11px; }
+.user-rate-card { padding: 10px; border: 1px solid #e4e7ec; border-radius: 5px; background: #fafbfc; }
+.user-rate-card span { display: grid; gap: 3px; }
+.user-rate-card small { color: #667085; font-size: 10px; }
+.users-badge.super-admin { color: #6941c6; background: #f2edff; }
+.users-actions .users-edit-btn:disabled,
+.users-actions .users-delete-btn:disabled { cursor: not-allowed; opacity: .5; }
+
 @media (max-width: 700px) {
     .users-header { align-items: flex-start; flex-direction: column; }
     .users-primary-btn { width: 100%; justify-content: center; }
+    .user-location-grid { grid-template-columns: 1fr; }
+    #userModal .payment-modal { width: 100%; }
+    .user-permissions-table th { font-size: 9px; }
+    .user-permissions-table th:first-child,
+    .user-permissions-table td:first-child { width: 26%; }
 }
