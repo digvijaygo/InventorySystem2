@@ -26,7 +26,7 @@
                         </div>
                         <div class="brand-footer">
                             <h2>Welcome</h2>
-                            <p>Securely access dispatch, daily stocks, and contractor workflows with OTP verification.</p>
+                            <p>Securely access dispatch, daily stocks, and contractor workflows.</p>
                         </div>
                     </div>
 
@@ -49,8 +49,8 @@
                             </svg>
                         </div>
                         <div class="brand-footer">
-                            <h2>OTP Protected</h2>
-                            <p>Role-aware mobile OTP authentication for secure access to your internal operations.</p>
+                            <h2>Password Protected</h2>
+                            <p>Role-aware password authentication for secure access to your internal operations.</p>
                         </div>
                     </div>
                 </div>
@@ -65,24 +65,26 @@
             <section class="form-side">
                 <div class="form-wrapper">
                     <h1 class="system-title">Inventory System</h1>
-                    <p class="system-subtitle">Secure OTP Login</p>
+                    <p class="system-subtitle">Sign in with your mobile number &amp; password</p>
 
-                    <form id="requestOtpForm" class="form-block" autocomplete="off">
+                    <form id="loginForm" class="form-block" autocomplete="off">
                         <h2 class="sign-in-heading">Sign In</h2>
                         <label for="mobileNumber">Registered Mobile Number</label>
                         <input id="mobileNumber" type="tel" maxlength="10" placeholder="Enter 10-digit mobile number" required>
-                        <button type="submit" class="submit-btn">Send OTP</button>
+
+                        <label for="passwordInput" style="margin-top:12px;">Password</label>
+                        <input id="passwordInput" type="password" placeholder="Enter your password" required>
+
+                        <button type="submit" class="submit-btn">Sign In</button>
+                        <button type="button" id="forgotPasswordBtn" class="forgot-password-btn">Forgot password?</button>
                     </form>
 
-                    <form id="verifyOtpForm" class="form-block hidden" autocomplete="off">
-                        <h2 class="sign-in-heading">Verify OTP</h2>
-                        <p class="hint">Enter the OTP sent to your mobile.</p>
-                        <label for="otpCode">OTP Code</label>
-                        <input id="otpCode" type="text" maxlength="6" placeholder="Enter 6-digit OTP" required>
-                        <div class="form-actions">
-                            <button type="button" id="changeMobileBtn" class="secondary-btn">Change Number</button>
-                            <button type="submit" class="submit-btn">Verify & Login</button>
-                        </div>
+                    <form id="forgotPasswordForm" class="form-block" hidden>
+                        <h2 class="sign-in-heading">Reset Password</h2>
+                        <label for="resetMobileNumber">Registered Mobile Number</label>
+                        <input id="resetMobileNumber" type="tel" inputmode="numeric" maxlength="10" autocomplete="tel-national" placeholder="Enter 10-digit mobile number" required>
+                        <button type="submit" id="resetPasswordSubmit" class="submit-btn">Reset Password</button>
+                        <button type="button" id="backToLoginBtn" class="forgot-password-btn">Back to Sign In</button>
                     </form>
 
                     <p id="statusText" class="status-text" aria-live="polite"></p>

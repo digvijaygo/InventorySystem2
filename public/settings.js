@@ -29,10 +29,20 @@
       const autoFolderInput     = document.getElementById('autoBackupFolder');
       const chooseFolderBtn     = document.getElementById('chooseFolderBtn');
       const autoFrequencySelect = document.getElementById('autoBackupFrequency');
-      const autoTimeInput       = document.getElementById('autoBackupTime');
       const autoKeepInput       = document.getElementById('autoBackupKeep');
       const autoLastSaved       = document.getElementById('autoBackupLastSaved');
       const backupNowBtn        = document.getElementById('backupNowBtn');
+
+      // Schedule wrappers + inputs
+      const dailyWrapper        = document.getElementById('autoBackupDailyWrapper');
+      const weeklyWrapper       = document.getElementById('autoBackupWeeklyWrapper');
+      const monthlyWrapper      = document.getElementById('autoBackupMonthlyWrapper');
+
+      const autoTimeInput       = document.getElementById('autoBackupTime');        // daily
+      const autoDayOfWeek       = document.getElementById('autoBackupDayOfWeek');   // weekly
+      const autoWeekTime        = document.getElementById('autoBackupWeekTime');    // weekly
+      const autoDayOfMonth      = document.getElementById('autoBackupDayOfMonth');  // monthly
+      const autoMonthTime       = document.getElementById('autoBackupMonthTime');   // monthly
 
       const restoreFileInput    = document.getElementById('restoreFileInput');
       const restoreFilePreview  = document.getElementById('restoreFilePreview');
@@ -85,6 +95,56 @@
         return payload;
       }
 
+      /* ============ SCHEDULE UI HELPERS ============ */
+      // Show only the wrapper that matches the chosen frequency.
+      function applyFrequencyVisibility(freq) {
+        dailyWrapper.style.display   = freq === 'daily'   ? 'inline-flex' : 'none';
+        weeklyWrapper.style.display  = freq === 'weekly'  ? 'inline-flex' : 'none';
+        monthlyWrapper.style.display = freq === 'monthly' ? 'inline-flex' : 'none';
+      }
+
+      // Read the current schedule from the form into a normalized object.
+      function readScheduleFromForm() {
+        const freq = autoFrequencySelect.value || 'daily';
+        const schedule = { frequency: freq, time: '23:00' };
+
+        if (freq === 'daily') {
+          schedule.time = autoTimeInput.value || '23:00';
+        } else if (freq === 'weekly') {
+          schedule.time      = autoWeekTime.value || '23:00';
+          schedule.dayOfWeek = Number(autoDayOfWeek.value); // 0–6 (Sun–Sat)
+        } else if (freq === 'monthly') {
+          schedule.time       = autoMonthTime.value || '23:00';
+          schedule.dayOfMonth = Number(autoDayOfMonth.value); // 1–31
+        }
+        return schedule;
+      }
+
+      // Fill the form fields from a server config object.
+      function writeScheduleToForm(cfg) {
+        const freq = (cfg && cfg.frequency) || 'daily';
+        autoFrequencySelect.value = freq;
+        applyFrequencyVisibility(freq);
+
+        if (freq === 'daily') {
+          autoTimeInput.value = (cfg && cfg.time) || '23:00';
+        } else if (freq === 'weekly') {
+          autoWeekTime.value   = (cfg && cfg.time) || '23:00';
+          autoDayOfWeek.value  = String(
+            cfg && cfg.dayOfWeek !== undefined && cfg.dayOfWeek !== null
+              ? Number(cfg.dayOfWeek)
+              : 1
+          );
+        } else if (freq === 'monthly') {
+          autoMonthTime.value   = (cfg && cfg.time) || '23:00';
+          autoDayOfMonth.value  = String(
+            cfg && cfg.dayOfMonth !== undefined && cfg.dayOfMonth !== null
+              ? Math.min(31, Math.max(1, Number(cfg.dayOfMonth)))
+              : 1
+          );
+        }
+      }
+
       /* ============ 1. BACKUP TO COMPUTER ============ */
       async function downloadBackup() {
         setStatus(downloadStatus, 'Preparing backup…', 'info');
@@ -127,23 +187,26 @@
         try {
           const cfg = await apiJson(`${BACKUP_API}/auto-config`, { method: 'GET' });
           if (!cfg) return;
-          autoEnabledSwitch.checked   = !!cfg.enabled;
-          autoFolderInput.value       = cfg.folder || '';
-          autoFrequencySelect.value   = cfg.frequency || 'daily';
-          autoTimeInput.value         = cfg.time || '23:00';
-          autoKeepInput.value         = Number(cfg.keep) > 0 ? Number(cfg.keep) : 7;
-          autoLastSaved.textContent   = formatDateTime(cfg.lastSaved);
+          autoEnabledSwitch.checked = !!cfg.enabled;
+          autoFolderInput.value     = cfg.folder || '';
+          autoKeepInput.value       = Number(cfg.keep) > 0 ? Number(cfg.keep) : 7;
+          writeScheduleToForm(cfg);
+          autoLastSaved.textContent = formatDateTime(cfg.lastSaved);
         } catch (err) {
           console.warn('[settings] loadAutoBackupConfig:', err.message);
         }
       }
       async function saveAutoBackupConfig(extra = {}) {
+        const schedule = readScheduleFromForm();
         const payload = {
-          enabled:   !!autoEnabledSwitch.checked,
-          folder:    autoFolderInput.value || '',
-          frequency: autoFrequencySelect.value || 'daily',
-          time:      autoTimeInput.value || '23:00',
-          keep:      Math.max(1, Math.min(100, Number(autoKeepInput.value) || 7)),
+          enabled: !!autoEnabledSwitch.checked,
+          folder:  autoFolderInput.value || '',
+          keep:    Math.max(1, Math.min(100, Number(autoKeepInput.value) || 7)),
+          // schedule fields
+          frequency:  schedule.frequency,
+          time:       schedule.time,
+          dayOfWeek:  schedule.dayOfWeek,
+          dayOfMonth: schedule.dayOfMonth,
           ...extra
         };
         return apiJson(`${BACKUP_API}/auto-config`, {
@@ -284,8 +347,23 @@
       chooseFolderBtn.addEventListener('click', chooseFolder);
       backupNowBtn.addEventListener('click', backupNow);
 
-      // Persist changes to the auto backup config on any input change
-      [autoEnabledSwitch, autoFrequencySelect, autoTimeInput, autoKeepInput].forEach((el) => {
+      // When frequency changes, swap the visible schedule controls and persist.
+      autoFrequencySelect.addEventListener('change', async () => {
+        applyFrequencyVisibility(autoFrequencySelect.value);
+        try { await saveAutoBackupConfig(); }
+        catch (err) { console.warn('[settings] auto-save failed:', err.message); }
+      });
+
+      // Persist on any schedule change
+      [
+        autoEnabledSwitch,
+        autoKeepInput,
+        autoTimeInput,
+        autoDayOfWeek,
+        autoWeekTime,
+        autoDayOfMonth,
+        autoMonthTime
+      ].forEach((el) => {
         el.addEventListener('change', async () => {
           try { await saveAutoBackupConfig(); }
           catch (err) { console.warn('[settings] auto-save failed:', err.message); }
@@ -319,6 +397,8 @@
       /* ============ INIT ============ */
       (async function initializePage() {
         try {
+          // Default visibility before config loads
+          applyFrequencyVisibility(autoFrequencySelect.value || 'daily');
           await loadAutoBackupConfig();
         } catch (err) {
           console.warn('[settings] init failed:', err.message);

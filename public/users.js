@@ -40,7 +40,8 @@
             name: document.getElementById('userFullName'),
             mobile: document.getElementById('userMobileNumber'),
             role: document.getElementById('userRole'),
-            active: document.getElementById('userIsActive')
+            active: document.getElementById('userIsActive'),
+            password: document.getElementById('userPassword')
         };
 
         document.getElementById('userPermissionsBody').innerHTML = MODULES.map(([key, label, icon]) => `
@@ -77,6 +78,10 @@
             fields.mobile.value = user?.mobile_number || '';
             fields.role.value = user?.role || 'Employee';
             fields.active.value = String(user && Number(user.is_active) === 0 ? 0 : 1);
+            fields.password.value = '';
+            fields.password.placeholder = user
+                ? 'Leave blank to keep current password'
+                : 'Leave blank to use mobile number as password';
             document.querySelectorAll('#userPermissionsBody tr').forEach((row) => {
                 const rights = user?.permissions?.[row.dataset.module] || {};
                 row.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
@@ -93,9 +98,12 @@
             });
             document.getElementById('userRateCardAccess').checked = Boolean(user?.rate_card_access);
             const isSuperAdmin = user?.role === 'Super Admin';
+            if (isSuperAdmin) document.getElementById('userModalSubtitle').textContent = 'Update name, mobile number and password';
             document.getElementById('userAccessSection').hidden = isSuperAdmin;
             document.getElementById('userLocationsSection').hidden = isSuperAdmin;
             document.querySelector('.user-rate-card').hidden = isSuperAdmin;
+            fields.role.closest('.form-group').hidden = isSuperAdmin;
+            fields.active.closest('.form-group').hidden = isSuperAdmin;
             fields.role.disabled = isSuperAdmin;
             fields.active.disabled = isSuperAdmin;
             modal.style.display = 'flex';
@@ -112,7 +120,7 @@
                     <td>${user.role === 'Super Admin' || user.rate_card_access ? 'Yes' : 'No'}</td>
                     <td><span class="users-badge ${user.role === 'Super Admin' ? 'super-admin' : active ? 'active' : 'inactive'}">${user.role === 'Super Admin' ? 'Super Admin' : active ? 'Active' : 'Inactive'}</span></td>
                     <td><div class="users-actions">
-                        <button type="button" class="users-edit-btn" data-edit-id="${user.id}" ${user.role === 'Super Admin' ? 'disabled' : ''}>Edit</button>
+                        <button type="button" class="users-edit-btn" data-edit-id="${user.id}">Edit</button>
                         <button type="button" class="users-delete-btn" data-delete-id="${user.id}" ${user.role === 'Super Admin' ? 'disabled' : ''}>Delete</button>
                     </div></td>
                 </tr>`;
@@ -155,15 +163,29 @@
             const id = Number(fields.id.value || 0);
             const mobile = String(fields.mobile.value || '').replace(/\D/g, '').slice(0, 10);
             if (!/^\d{10}$/.test(mobile)) { setStatus('Enter a valid 10-digit mobile number.', true); return; }
+
+            const isSuperAdmin = users.find((user) => Number(user.id) === id)?.role === 'Super Admin';
+            const payload = {
+                full_name: fields.name.value.trim(),
+                mobile_number: mobile,
+                ...(!isSuperAdmin ? {
+                role: fields.role.value,
+                is_active: Number(fields.active.value),
+                permissions: collectPermissions(),
+                locations: collectLocations(),
+                rate_card_access: document.getElementById('userRateCardAccess').checked
+                } : {})
+            };
+            const typedPassword = String(fields.password.value || '');
+            if (typedPassword) {
+                if (typedPassword.length < 6) { setStatus('Password must be at least 6 characters.', true); return; }
+                payload.password = typedPassword;
+            }
+
             const response = await fetch(id ? `${API_URL}/${id}` : API_URL, {
                 method: id ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-                body: JSON.stringify({
-                    full_name: fields.name.value.trim(), mobile_number: mobile,
-                    role: fields.role.value, is_active: Number(fields.active.value),
-                    permissions: collectPermissions(), locations: collectLocations(),
-                    rate_card_access: document.getElementById('userRateCardAccess').checked
-                })
+                body: JSON.stringify(payload)
             }).catch(error => { setStatus(error.message, true); return null; });
             if (!response || !response.ok) {
                 const body = response ? await response.json().catch(() => ({})) : {};

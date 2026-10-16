@@ -38,6 +38,10 @@ button, input { font: inherit; }
 .submit-btn, .secondary-btn { min-height: 40px; padding: 0 15px; border-radius: 5px; font-size: 12px; font-weight: 700; cursor: pointer; }
 .submit-btn { width: 100%; margin-top: 14px; color: #fff; background: var(--blue); border: 1px solid var(--blue); }
 .submit-btn:hover { background: var(--blue-dark); }
+.form-block[hidden] { display: none !important; }
+.forgot-password-btn { display: block; margin: 12px auto 0; padding: 5px; border: 0; background: transparent; color: var(--blue); font-size: 12px; cursor: pointer; }
+.forgot-password-btn:hover { text-decoration: underline; }
+.submit-btn:disabled { opacity: .6; cursor: wait; }
 .secondary-btn { color: #344054; background: #fff; border: 1px solid #cfd5dd; }
 .form-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
 .form-actions .submit-btn { margin: 0; }

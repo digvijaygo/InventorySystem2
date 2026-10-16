@@ -11,6 +11,37 @@ const fs = require('fs');
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
+/* ============================================================
+   PASSWORD HASHING (PBKDF2 — no external deps)
+   ============================================================ */
+const PBKDF2_ITERATIONS = 120000;
+const PBKDF2_KEYLEN = 32;
+const PBKDF2_DIGEST = 'sha256';
+
+function hashPassword(plain) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.pbkdf2Sync(String(plain), salt, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, PBKDF2_DIGEST).toString('hex');
+    return `pbkdf2$${PBKDF2_ITERATIONS}$${salt}$${hash}`;
+}
+
+function verifyPassword(plain, stored) {
+    try {
+        if (!stored || typeof stored !== 'string') return false;
+        const parts = stored.split('$');
+        if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false;
+        const iterations = Number(parts[1]);
+        const salt = parts[2];
+        const expected = parts[3];
+        const actual = crypto.pbkdf2Sync(String(plain), salt, iterations, PBKDF2_KEYLEN, PBKDF2_DIGEST).toString('hex');
+        if (actual.length !== expected.length) return false;
+        return crypto.timingSafeEqual(Buffer.from(actual, 'hex'), Buffer.from(expected, 'hex'));
+    } catch (_e) { return false; }
+}
+
+function defaultPasswordFor(mobileNumber) {
+    return String(mobileNumber || '').replace(/\D/g, '').slice(0, 10);
+}
+
 app.use(cors());
 app.use(bodyParser.json({ limit: '5mb' }));
 app.get('/', (req, res) => res.redirect('/login.html'));
@@ -22,7 +53,7 @@ if (!fs.existsSync(restoreUploadDir)) fs.mkdirSync(restoreUploadDir, { recursive
 
 const restoreUpload = multer({
   dest: restoreUploadDir,
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB cap
+  limits: { fileSize: 500 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!/\.sqlite$/i.test(file.originalname)) {
       return cb(new Error('Only .sqlite backup files are allowed.'));
@@ -31,10 +62,6 @@ const restoreUpload = multer({
   }
 });
 
-
-
-
-const otpChallenges = new Map();
 const sessions = new Map();
 const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 
@@ -353,13 +380,26 @@ db.serialize(() => {
         mobile_number TEXT NOT NULL UNIQUE,
         role TEXT NOT NULL DEFAULT 'Employee',
         is_active INTEGER NOT NULL DEFAULT 1,
+        password_hash TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )`);
     db.run(`INSERT OR IGNORE INTO users (full_name, mobile_number, role, is_active)
-        VALUES ('System Administrator', '9999999999', 'Admin', 1)`);
-    db.run(`UPDATE users SET role = 'Admin' WHERE role = 'Super Admin' AND mobile_number <> '9999999999'`);
-    db.run(`UPDATE users SET role = 'Super Admin', is_active = 1 WHERE mobile_number = '9999999999'`);
+        SELECT 'System Administrator', '9999999999', 'Admin', 1
+        WHERE NOT EXISTS (SELECT 1 FROM users WHERE role = 'Super Admin')`);
+    db.run(`UPDATE users SET role = 'Super Admin', is_active = 1
+        WHERE mobile_number = '9999999999'
+          AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'Super Admin')`);
     db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_single_super_admin ON users(role) WHERE role = 'Super Admin'`);
+
+    // ---- Password-based auth: add column for legacy DBs & seed defaults ----
+    db.run(`ALTER TABLE users ADD COLUMN password_hash TEXT`, () => {});
+    db.all(`SELECT id, mobile_number FROM users WHERE password_hash IS NULL`, [], (err, rows) => {
+        if (err || !rows) return;
+        const stmt = db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`);
+        rows.forEach((row) => stmt.run([hashPassword(defaultPasswordFor(row.mobile_number)), row.id]));
+        stmt.finalize();
+    });
+
     db.run(`CREATE TABLE IF NOT EXISTS user_access (
         user_id INTEGER PRIMARY KEY,
         permissions TEXT NOT NULL DEFAULT '{}',
@@ -400,7 +440,6 @@ db.serialize(() => {
     db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_stocks_unique
             ON daily_stocks(stock_date, location, category, size)`);
 
-    /* ---------- Seed default daily stock categories ---------- */
     const categoryInsert = db.prepare('INSERT OR IGNORE INTO daily_stock_categories (name) VALUES (?)');
     DAILY_STOCK_CATEGORIES.forEach((categoryName) => categoryInsert.run(categoryName));
     categoryInsert.finalize();
@@ -555,7 +594,6 @@ db.run(`CREATE TABLE IF NOT EXISTS estimates (
 db.run(`CREATE INDEX IF NOT EXISTS idx_estimates_date ON estimates(invoice_date)`);
 db.run(`CREATE INDEX IF NOT EXISTS idx_estimates_location ON estimates(location)`);
 
-    // Add location column for existing DBs
     db.run(`ALTER TABLE purchase_sales ADD COLUMN location TEXT`, () => {});
     db.run(`CREATE INDEX IF NOT EXISTS idx_purchase_sales_location ON purchase_sales(location)`);
 
@@ -568,7 +606,6 @@ db.run(`CREATE INDEX IF NOT EXISTS idx_estimates_location ON estimates(location)
         paid REAL DEFAULT 0,
         location TEXT
     )`);
-    // Add location column for existing DBs
     db.run(`ALTER TABLE attendance_employees ADD COLUMN location TEXT`, () => {});
     db.run(`CREATE INDEX IF NOT EXISTS idx_attendance_employees_location ON attendance_employees(location)`);
 
@@ -585,6 +622,7 @@ db.run(`CREATE INDEX IF NOT EXISTS idx_estimates_location ON estimates(location)
         UNIQUE(employee_id, date),
         FOREIGN KEY(employee_id) REFERENCES attendance_employees(id) ON DELETE CASCADE
     )`);
+
     /* ---------- CA CONTACTS ---------- */
     db.run(`CREATE TABLE IF NOT EXISTS ca_contacts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -604,17 +642,18 @@ db.run(`CREATE INDEX IF NOT EXISTS idx_estimates_location ON estimates(location)
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         business_id INTEGER NOT NULL DEFAULT 1,
         ca_contact_id INTEGER,
-        share_type TEXT NOT NULL,                -- 'email' | 'whatsapp' | 'zip'
+        share_type TEXT NOT NULL,
         date_start TEXT NOT NULL,
         date_end TEXT NOT NULL,
-        document_types TEXT NOT NULL,            -- JSON-encoded array
-        status TEXT NOT NULL DEFAULT 'pending',  -- 'pending' | 'sent' | 'failed'
+        document_types TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
         error_message TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(ca_contact_id) REFERENCES ca_contacts(id) ON DELETE SET NULL
     )`);
     db.run(`CREATE INDEX IF NOT EXISTS idx_ca_share_logs_created
             ON ca_share_logs(created_at DESC)`);
+
     /* ---------- Seed demo contractors (only if empty) ---------- */
     db.get("SELECT COUNT(*) AS c FROM contractors", (err, row) => {
         if (err || !row || row.c > 0) return;
@@ -1239,14 +1278,20 @@ function readProductPayload(body) {
 }
 
 app.get('/api/products', (req, res) => {
-    const rawLocations = req.allowedLocations || (Array.isArray(req.query.location) ? req.query.location : [req.query.location]);
-    const locations = [...new Set(rawLocations.map(getProductLocation).filter(Boolean))];
-    if (!locations.length || locations.length !== new Set(rawLocations.filter(Boolean)).size) {
+    const requested = req.query.location;
+    const rawLocations = requested === undefined
+        ? req.allowedLocations || SUPPORTED_LOCATIONS
+        : Array.isArray(requested) ? requested : [requested];
+    const normalizedLocations = rawLocations.map(getProductLocation);
+    if (normalizedLocations.some((location) => !location)) {
         return res.status(400).json({ error: 'Select at least one valid location.' });
     }
+    const allowed = new Set((req.allowedLocations || SUPPORTED_LOCATIONS).map((location) => location.toLowerCase()));
+    const locations = [...new Set(normalizedLocations)].filter((location) => allowed.has(location.toLowerCase()));
+    if (!locations.length) return res.json({ rows: [] });
 
     const search = String(req.query.search || '').trim();
-    const params = [...locations];
+    const params = locations.map((location) => location.toLowerCase());
     let searchSql = '';
     if (search) {
         searchSql = ' AND (product_name LIKE ? OR item_code LIKE ? OR category LIKE ?)';
@@ -1257,7 +1302,7 @@ app.get('/api/products', (req, res) => {
     db.all(
         `SELECT id, product_name, item_code, category, sale_price, wholesale_price,
                 purchase_price, stock, location
-         FROM products WHERE location IN (${locations.map(() => '?').join(', ')})${searchSql}
+         FROM products WHERE LOWER(location) IN (${locations.map(() => '?').join(', ')})${searchSql}
          ORDER BY product_name COLLATE NOCASE ASC, id ASC`,
         params,
         (err, rows) => {
@@ -1268,17 +1313,24 @@ app.get('/api/products', (req, res) => {
 });
 
 app.post('/api/products', (req, res) => {
-    const parsed = readProductPayload(req.body || {});
-    if (parsed.error) return res.status(400).json({ error: parsed.error });
+    const body = req.body || {};
+    const rawLocations = Array.isArray(body.locations) ? body.locations : [body.location];
+    const locations = [...new Set(rawLocations.map(getProductLocation))];
+    if (!locations.length || locations.some((location) => !location)) {
+        return res.status(400).json({ error: 'Select at least one valid location.' });
+    }
+    const records = locations.map((location) => readProductPayload({ ...body, location }));
+    const invalid = records.find((record) => record.error);
+    if (invalid) return res.status(400).json({ error: invalid.error });
 
     db.run(
         `INSERT INTO products
             (product_name, item_code, category, sale_price, wholesale_price, purchase_price, stock, location)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        parsed.values,
+         VALUES ${records.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+        records.flatMap((record) => record.values),
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
-            res.status(201).json({ id: this.lastID });
+            res.status(201).json({ id: this.lastID, locations });
         }
     );
 });
@@ -1438,12 +1490,9 @@ app.delete('/api/purchase-sales/:id', (req, res) => {
     });
 });
 
-
 /* ============================================================
    API: ESTIMATES / QUOTATIONS
 ============================================================ */
-
-// GET all estimates
 app.get('/api/estimates', (req, res) => {
     const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
     if (!locations.length) return res.json([]);
@@ -1458,7 +1507,6 @@ app.get('/api/estimates', (req, res) => {
     );
 });
 
-// GET one estimate
 app.get('/api/estimates/:id', (req, res) => {
     const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
     db.get(`SELECT * FROM estimates WHERE id=? AND LOWER(location) IN (${locations.map(() => '?').join(', ')})`,
@@ -1469,7 +1517,6 @@ app.get('/api/estimates/:id', (req, res) => {
     });
 });
 
-// POST create estimate
 app.post('/api/estimates', (req, res) => {
     const b = req.body || {};
     if (req.auth.user.role !== 'Super Admin' && !b.location) return res.status(400).json({ error: 'Location is required.' });
@@ -1518,7 +1565,6 @@ app.post('/api/estimates', (req, res) => {
     );
 });
 
-// PUT update estimate
 app.put('/api/estimates/:id', (req, res) => {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid id' });
@@ -1566,7 +1612,6 @@ app.put('/api/estimates/:id', (req, res) => {
     );
 });
 
-// DELETE estimate
 app.delete('/api/estimates/:id', (req, res) => {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid id' });
@@ -1579,9 +1624,8 @@ app.delete('/api/estimates/:id', (req, res) => {
     });
 });
 
-
 /* ============================================================
-   API: SALE REPORTS (used by reports.js Sale tab)
+   API: SALE REPORTS
 ============================================================ */
 app.get('/api/sale-reports', (req, res) => {
     const { fromDate, toDate, status, category, search, location } = req.query;
@@ -1612,7 +1656,6 @@ app.get('/api/sale-reports', (req, res) => {
     db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        // Aggregate per row for the reports UI
         const out = (rows || []).map(r => ({
             id: r.id,
             invoice_date: r.invoice_date,
@@ -1622,7 +1665,7 @@ app.get('/api/sale-reports', (req, res) => {
             quantity: n(r.quantity),
             amount: n(r.amount),
             total_value: n(r.amount),
-            received: n(r.amount),   // simplified — full payment assumed if status=PAID
+            received: n(r.amount),
             cement: /cement/i.test(r.item_name || '') ? n(r.quantity) : 0,
             steel:  /steel/i.test(r.item_name  || '') ? n(r.quantity) : 0,
             paint:  /paint/i.test(r.item_name  || '') ? n(r.quantity) : 0,
@@ -1634,7 +1677,7 @@ app.get('/api/sale-reports', (req, res) => {
 });
 
 /* ============================================================
-   API: PURCHASE REPORTS (used by reports.js Purchase tab)
+   API: PURCHASE REPORTS
 ============================================================ */
 app.get('/api/purchase-reports', (req, res) => {
     const { fromDate, toDate, status, category, search, location } = req.query;
@@ -1793,31 +1836,83 @@ app.post('/api/attendance-employees/bulk', (req, res) => {
 /* ============================================================
    API: AUTHENTICATION / USERS
 ============================================================ */
-app.post('/api/auth/request-otp', (req, res) => {
+const passwordResetLimits = new Map();
+
+function resetRateAllowed(key, maximum) {
+    const now = Date.now();
+    for (const [entryKey, entry] of passwordResetLimits) {
+        if (entry.expiresAt <= now) passwordResetLimits.delete(entryKey);
+    }
+    const entry = passwordResetLimits.get(key) || { count: 0, expiresAt: now + 15 * 60 * 1000 };
+    entry.count += 1;
+    passwordResetLimits.set(key, entry);
+    return entry.count <= maximum;
+}
+
+app.post('/api/auth/reset-password', (req, res) => {
+    const mobile = String(req.body?.mobile_number || '').trim();
+    if (!/^\d{10}$/.test(mobile)) return res.status(400).json({ error: 'Enter a valid 10-digit mobile number.' });
+    if (!resetRateAllowed(`reset-ip:${req.ip}`, 10) || !resetRateAllowed(`reset-mobile:${mobile}`, 3)) {
+        return res.status(429).json({ error: 'Too many reset requests. Try again in 15 minutes.' });
+    }
+    db.get('SELECT id FROM users WHERE mobile_number=? AND is_active=1', [mobile], (error, user) => {
+        if (error) return res.status(500).json({ error: 'Unable to reset password.' });
+        const message = 'If this mobile belongs to an active account, its password has been reset to the default.';
+        if (!user) return res.json({ ok: true, message });
+        db.run('UPDATE users SET password_hash=? WHERE id=? AND mobile_number=? AND is_active=1',
+            [hashPassword(defaultPasswordFor(mobile)), user.id, mobile], function (error) {
+                if (error) return res.status(500).json({ error: 'Unable to reset password.' });
+                if (!this.changes) return res.json({ ok: true, message });
+                for (const [token, session] of sessions) {
+                    if (Number(session.user.id) === Number(user.id)) sessions.delete(token);
+                }
+                res.json({ ok: true, message });
+            });
+    });
+});
+
+app.post('/api/auth/login', (req, res) => {
     const mobileNumber = String(req.body && req.body.mobile_number || '').replace(/\D/g, '').slice(0, 10);
+    const password = String(req.body && req.body.password || '');
     if (!/^\d{10}$/.test(mobileNumber)) return res.status(400).json({ error: 'Enter a valid 10-digit mobile number.' });
-    db.get(`SELECT id, full_name, mobile_number, role FROM users WHERE mobile_number=? AND is_active=1`,
+    if (!password) return res.status(400).json({ error: 'Password is required.' });
+
+    db.get(`SELECT id, full_name, mobile_number, role, is_active, password_hash
+            FROM users WHERE mobile_number=? AND is_active=1`,
         [mobileNumber], (err, user) => {
             if (err) return res.status(500).json({ error: err.message });
-            if (!user) return res.status(404).json({ error: 'No active user is registered with this mobile number.' });
-            const otp = String(crypto.randomInt(100000, 1000000));
-            otpChallenges.set(mobileNumber, { otp, user, expiresAt: Date.now() + 5 * 60 * 1000 });
-            res.json({ ok: true, otp });
+            if (!user) return res.status(401).json({ error: 'Invalid mobile number or password.' });
+            if (!verifyPassword(password, user.password_hash)) {
+                return res.status(401).json({ error: 'Invalid mobile number or password.' });
+            }
+            const token = crypto.randomBytes(32).toString('hex');
+            sessions.set(token, {
+                user: { id: user.id, full_name: user.full_name, mobile_number: user.mobile_number, role: user.role },
+                expiresAt: Date.now() + SESSION_MAX_AGE_SECONDS * 1000
+            });
+            res.setHeader('Set-Cookie', `inventory_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_MAX_AGE_SECONDS}`);
+            res.json({ ok: true, user: { id: user.id, full_name: user.full_name, mobile_number: user.mobile_number, role: user.role } });
         });
 });
 
-app.post('/api/auth/verify-otp', (req, res) => {
-    const mobileNumber = String(req.body && req.body.mobile_number || '').replace(/\D/g, '').slice(0, 10);
-    const otpCode = String(req.body && req.body.otp_code || '').trim();
-    const challenge = otpChallenges.get(mobileNumber);
-    if (!challenge || challenge.expiresAt <= Date.now() || challenge.otp !== otpCode) {
-        return res.status(401).json({ error: 'Invalid or expired OTP.' });
-    }
-    otpChallenges.delete(mobileNumber);
-    const token = crypto.randomBytes(32).toString('hex');
-    sessions.set(token, { user: challenge.user, expiresAt: Date.now() + SESSION_MAX_AGE_SECONDS * 1000 });
-    res.setHeader('Set-Cookie', `inventory_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_MAX_AGE_SECONDS}`);
-    res.json({ ok: true, user: challenge.user });
+// Allow the signed-in user to change their own password
+app.post('/api/auth/change-password', requireAuth, (req, res) => {
+    const currentPassword = String(req.body && req.body.current_password || '');
+    const newPassword = String(req.body && req.body.new_password || '');
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Current and new password are required.' });
+    if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+
+    db.get(`SELECT password_hash FROM users WHERE id=?`, [req.auth.user.id], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(404).json({ error: 'User not found.' });
+        if (!verifyPassword(currentPassword, row.password_hash)) {
+            return res.status(401).json({ error: 'Current password is incorrect.' });
+        }
+        db.run(`UPDATE users SET password_hash=? WHERE id=?`, [hashPassword(newPassword), req.auth.user.id], (uErr) => {
+            if (uErr) return res.status(500).json({ error: uErr.message });
+            res.json({ ok: true });
+        });
+    });
 });
 
 app.get('/api/auth/session', (req, res) => {
@@ -1902,8 +1997,13 @@ app.post('/api/users', requireSuperAdmin, (req, res) => {
     if (!name || !/^\d{10}$/.test(mobile)) return res.status(400).json({ error: 'Valid name and mobile number are required.' });
     const role = body.role === 'Admin' ? 'Admin' : 'Employee';
     const access = sanitizeUserAccess(body);
-    db.run(`INSERT INTO users (full_name, mobile_number, role, is_active) VALUES (?,?,?,?)`,
-        [name, mobile, role, Number(body.is_active) === 0 ? 0 : 1],
+
+    const rawPassword = body.password ? String(body.password) : defaultPasswordFor(mobile);
+    if (rawPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    const passwordHash = hashPassword(rawPassword);
+
+    db.run(`INSERT INTO users (full_name, mobile_number, role, is_active, password_hash) VALUES (?,?,?,?,?)`,
+        [name, mobile, role, Number(body.is_active) === 0 ? 0 : 1, passwordHash],
         function (err) {
             if (err) return res.status(err.code === 'SQLITE_CONSTRAINT' ? 409 : 500).json({ error: err.code === 'SQLITE_CONSTRAINT' ? 'Mobile number is already registered.' : err.message });
             const userId = this.lastID;
@@ -1924,19 +2024,45 @@ app.put('/api/users/:id', requireSuperAdmin, (req, res) => {
     const role = body.role === 'Admin' ? 'Admin' : 'Employee';
     const access = sanitizeUserAccess(body);
 
+    const newPassword = body.password ? String(body.password) : '';
+    if (newPassword && newPassword.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    }
+
     db.get(`SELECT role FROM users WHERE id = ?`, [userId], (findErr, existing) => {
         if (findErr) return res.status(500).json({ error: findErr.message });
         if (!existing) return res.status(404).json({ error: 'User not found.' });
-        if (existing.role === 'Super Admin') return res.status(403).json({ error: 'The Super Admin account cannot be modified here.' });
-        db.run(`UPDATE users SET full_name=?, mobile_number=?, role=?, is_active=? WHERE id=?`,
-            [name, mobile, role, Number(body.is_active) === 0 ? 0 : 1, userId],
-            function (err) {
+        if (existing.role === 'Super Admin') {
+            const profileSql = newPassword
+                ? `UPDATE users SET full_name=?, mobile_number=?, password_hash=? WHERE id=?`
+                : `UPDATE users SET full_name=?, mobile_number=? WHERE id=?`;
+            const profileParams = newPassword
+                ? [name, mobile, hashPassword(newPassword), userId]
+                : [name, mobile, userId];
+            return db.run(profileSql, profileParams, function (err) {
                 if (err) return res.status(err.code === 'SQLITE_CONSTRAINT' ? 409 : 500).json({ error: err.code === 'SQLITE_CONSTRAINT' ? 'Mobile number is already registered.' : err.message });
-                saveUserAccess(userId, access, (accessErr) => {
-                    if (accessErr) return res.status(500).json({ error: accessErr.message });
-                    res.json({ ok: true });
-                });
+                res.json({ ok: true });
             });
+        }
+
+        const finishSave = () => {
+            saveUserAccess(userId, access, (accessErr) => {
+                if (accessErr) return res.status(500).json({ error: accessErr.message });
+                res.json({ ok: true });
+            });
+        };
+
+        const updateSql = newPassword
+            ? `UPDATE users SET full_name=?, mobile_number=?, role=?, is_active=?, password_hash=? WHERE id=?`
+            : `UPDATE users SET full_name=?, mobile_number=?, role=?, is_active=? WHERE id=?`;
+        const params = newPassword
+            ? [name, mobile, role, Number(body.is_active) === 0 ? 0 : 1, hashPassword(newPassword), userId]
+            : [name, mobile, role, Number(body.is_active) === 0 ? 0 : 1, userId];
+
+        db.run(updateSql, params, function (err) {
+            if (err) return res.status(err.code === 'SQLITE_CONSTRAINT' ? 409 : 500).json({ error: err.code === 'SQLITE_CONSTRAINT' ? 'Mobile number is already registered.' : err.message });
+            finishSave();
+        });
     });
 });
 
@@ -2312,7 +2438,6 @@ app.post('/api/stock-transfers', (req, res) => {
                             return;
                         }
 
-                        // Auto-create destination row with zero stock, then apply the transfer
                         db.run(
                             `INSERT INTO daily_stocks
                                 (stock_date, location, category, size, qty_for_1_cabin, qty_for_20_cabin, stock_at_kpr)
@@ -2362,7 +2487,6 @@ app.put('/api/stock-transfers/:id', (req, res) => {
             }
             if (old.transfer_date !== getTodayLocalISO()) { db.run('ROLLBACK'); return res.status(403).json({ error: "Only today's transfers can be edited." }); }
 
-            // Step 1: reverse old transfer
             db.get(
                 `SELECT id, stock_at_kpr FROM daily_stocks
                  WHERE stock_date = ? AND location = ? AND category = ? AND size = ?`,
@@ -2388,7 +2512,6 @@ app.put('/api/stock-transfers/:id', (req, res) => {
                                         [old.quantity, srcRow.id], (u2Err) => {
                                             if (u2Err) { db.run('ROLLBACK'); return res.status(500).json({ error: u2Err.message }); }
 
-                                            // Step 2: apply new values
                                             db.get(
                                                 `SELECT id, stock_at_kpr FROM daily_stocks
                                                  WHERE stock_date = ? AND location = ? AND category = ? AND size = ?`,
@@ -2515,16 +2638,11 @@ app.delete('/api/stock-transfers/:id', (req, res) => {
 /* ============================================================
    API: SHARE WITH CA
 ============================================================ */
-
-// Whitelisted document types the UI is allowed to send.
 const CA_ALLOWED_DOC_TYPES = new Set([
     'GSTR1', 'GSTR2', 'INVOICES', 'RETURNS', 'LEDGER'
 ]);
 
-// Build a CSV of the requested document types.
-// Returns { csv, rows } where rows is the raw data (for JSON/ZIP use).
 function buildCaDocumentData(docTypes, startDate, endDate, cb) {
-    // We fetch each dataset lazily and merge into one object.
     const result = {
         start: startDate,
         end: endDate,
@@ -2535,7 +2653,6 @@ function buildCaDocumentData(docTypes, startDate, endDate, cb) {
 
     const tasks = [];
 
-    // ---- GSTR-1 style: Sales (transaction_type = 'Sale') ----
     if (docTypes.includes('GSTR1')) {
         tasks.push(new Promise((resolve, reject) => {
             db.all(
@@ -2553,7 +2670,6 @@ function buildCaDocumentData(docTypes, startDate, endDate, cb) {
         }));
     }
 
-    // ---- GSTR-2 style: Purchases (transaction_type = 'Purchase') ----
     if (docTypes.includes('GSTR2')) {
         tasks.push(new Promise((resolve, reject) => {
             db.all(
@@ -2571,7 +2687,6 @@ function buildCaDocumentData(docTypes, startDate, endDate, cb) {
         }));
     }
 
-    // ---- Sales invoices (same as GSTR1 but distinct label for the UI) ----
     if (docTypes.includes('INVOICES')) {
         tasks.push(new Promise((resolve, reject) => {
             db.all(
@@ -2589,12 +2704,10 @@ function buildCaDocumentData(docTypes, startDate, endDate, cb) {
         }));
     }
 
-    // ---- Credit / Debit notes: placeholders (your DB has no separate table yet) ----
     if (docTypes.includes('RETURNS')) {
-        result.data.RETURNS = [];  // ready for when a returns table is added
+        result.data.RETURNS = [];
     }
 
-    // ---- Customer ledgers: aggregate Sale minus received per party ----
     if (docTypes.includes('LEDGER')) {
         tasks.push(new Promise((resolve, reject) => {
             db.all(
@@ -2616,7 +2729,6 @@ function buildCaDocumentData(docTypes, startDate, endDate, cb) {
         .catch((err) => cb(err));
 }
 
-// Convert the fetched CA data object into a flat CSV string (single file).
 function buildCaCsv(caData) {
     const lines = [];
     const push = (s) => lines.push(s);
@@ -2651,7 +2763,6 @@ function buildCaCsv(caData) {
     return lines.join('\n');
 }
 
-// Helper: read JSON body list of document types into a validated array.
 function readCaDocTypes(raw) {
     if (!Array.isArray(raw)) return [];
     return raw
@@ -2659,7 +2770,6 @@ function readCaDocTypes(raw) {
         .filter((v) => CA_ALLOWED_DOC_TYPES.has(v));
 }
 
-// Helper: insert a ca_share_logs row.
 function logCaShare({ businessId = 1, caContactId = null, shareType, start, end, docTypes, status, errorMessage = null }, cb) {
     db.run(
         `INSERT INTO ca_share_logs
@@ -2673,7 +2783,6 @@ function logCaShare({ businessId = 1, caContactId = null, shareType, start, end,
     );
 }
 
-/* ---------- GET /api/ca/config ---------- */
 app.get('/api/ca/config', requireAuth, (req, res) => {
     db.get(
         `SELECT id, ca_name, ca_email, ca_phone, ca_firm_reg, auto_share_reminder, updated_at
@@ -2696,7 +2805,6 @@ app.get('/api/ca/config', requireAuth, (req, res) => {
     );
 });
 
-/* ---------- POST /api/ca/config ---------- */
 app.post('/api/ca/config', requireAuth, (req, res) => {
     const b = req.body || {};
     const caName = String(b.caName || '').trim();
@@ -2741,7 +2849,6 @@ app.post('/api/ca/config', requireAuth, (req, res) => {
     });
 });
 
-/* ---------- POST /api/ca/share/email ---------- */
 app.post('/api/ca/share/email', requireAuth, (req, res) => {
     const b = req.body || {};
     const start = String(b.start || '').trim();
@@ -2765,8 +2872,6 @@ app.post('/api/ca/share/email', requireAuth, (req, res) => {
 
         const csv = buildCaCsv(caData);
 
-        // --- Replace this block with your real email sender (nodemailer, SES, etc.) ---
-        // For now, we log and return success so the UI flow is fully testable.
         console.log(`📧 [CA SHARE] Would email ${caEmail} (${caName || 'CA'}) — ${docTypes.length} docs, ${csv.length} bytes CSV`);
 
         logCaShare({
@@ -2786,7 +2891,6 @@ app.post('/api/ca/share/email', requireAuth, (req, res) => {
     });
 });
 
-/* ---------- POST /api/ca/share/whatsapp ---------- */
 app.post('/api/ca/share/whatsapp', requireAuth, (req, res) => {
     const b = req.body || {};
     const start = String(b.start || '').trim();
@@ -2802,8 +2906,6 @@ app.post('/api/ca/share/whatsapp', requireAuth, (req, res) => {
     if (!docTypes.length) return res.status(400).json({ error: 'Select at least one document type.' });
     if (caPhone.length < 10) return res.status(400).json({ error: 'CA WhatsApp number is required (10 digits min).' });
 
-    // wa.me deep link — user clicks and WhatsApp opens with a pre-filled message.
-    // In a production setup you'd host the ZIP somewhere and include the link.
     const message = encodeURIComponent(
         `Hello ${caName || 'CA'}, please find the requested reports for ${start} to ${end}. ` +
         `Documents included: ${docTypes.join(', ')}. — Sent from InventorySystem2`
@@ -2821,7 +2923,6 @@ app.post('/api/ca/share/whatsapp', requireAuth, (req, res) => {
     });
 });
 
-/* ---------- POST /api/ca/share/zip ---------- */
 app.post('/api/ca/share/zip', requireAuth, (req, res) => {
     const b = req.body || {};
     const start = String(b.start || '').trim();
@@ -2917,18 +3018,14 @@ app.post('/api/ca/share/zip', requireAuth, (req, res) => {
 /* ============================================================
    API: SETTINGS — BACKUP & RESTORE
 ============================================================ */
-
 const DB_PATH          = path.join(__dirname, 'database.sqlite');
 const AUTO_BACKUP_DIR  = path.join(__dirname, 'auto-backups');
 const BACKUP_CONFIG    = path.join(__dirname, 'backup-config.json');
 
-// Ensure the auto-backup folder exists
 if (!fs.existsSync(AUTO_BACKUP_DIR)) fs.mkdirSync(AUTO_BACKUP_DIR, { recursive: true });
 
-// In-memory scheduler handle
 let autoBackupTimer = null;
 
-/* ---------- Config helpers ---------- */
 function readBackupConfig() {
   try {
     if (!fs.existsSync(BACKUP_CONFIG)) return null;
@@ -2946,23 +3043,18 @@ function writeBackupConfig(cfg) {
   }
 }
 
-/* ---------- Timestamp helper ---------- */
 function backupStamp(d = new Date()) {
   const pad = (v) => String(v).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
 }
 
-/* ---------- Safe DB copy (SQLite) ---------- */
 function copyDbTo(targetPath) {
-  // fs.copyFileSync is safe for SQLite when no write transaction is in flight.
-  // For extra safety we run a quick WAL checkpoint first.
   return new Promise((resolve, reject) => {
     try {
       db.run('PRAGMA wal_checkpoint(FULL);', (err) => {
-        if (err) { /* non-fatal — continue */ }
+        if (err) { /* non-fatal */ }
         try {
           fs.copyFileSync(DB_PATH, targetPath);
-          // Also copy the WAL/SHM files if they exist, so the copy is consistent.
           const wal = `${DB_PATH}-wal`;
           const shm = `${DB_PATH}-shm`;
           if (fs.existsSync(wal)) try { fs.copyFileSync(wal, `${targetPath}-wal`); } catch (_e) {}
@@ -2978,14 +3070,13 @@ function copyDbTo(targetPath) {
   });
 }
 
-/* ---------- Prune old auto backups ---------- */
 function pruneAutoBackups(folder, keep) {
   try {
     if (!fs.existsSync(folder)) return;
     const files = fs.readdirSync(folder)
       .filter((f) => /^inventorysystem2_auto_.*\.sqlite$/i.test(f))
       .map((f) => ({ name: f, path: path.join(folder, f), mtime: fs.statSync(path.join(folder, f)).mtimeMs }))
-      .sort((a, b) => b.mtime - a.mtime); // newest first
+      .sort((a, b) => b.mtime - a.mtime);
     const excess = files.slice(keep);
     excess.forEach((f) => {
       try { fs.unlinkSync(f.path); } catch (_e) {}
@@ -2997,7 +3088,6 @@ function pruneAutoBackups(folder, keep) {
   }
 }
 
-/* ---------- Run auto backup ---------- */
 async function runAutoBackup(reason = 'manual') {
   const cfg = readBackupConfig() || {};
   if (reason !== 'manual' && !cfg.enabled) return { skipped: true };
@@ -3015,18 +3105,15 @@ async function runAutoBackup(reason = 'manual') {
   const target = path.join(folder, filename);
   await copyDbTo(target);
 
-  // Update lastSaved timestamp in config
   const nextCfg = { ...cfg, lastSaved: new Date().toISOString() };
   writeBackupConfig(nextCfg);
 
-  // Enforce the keep limit
   const keep = Math.max(1, Math.min(100, Number(cfg.keep) || 7));
   pruneAutoBackups(folder, keep);
 
   return { ok: true, file: target, lastSaved: nextCfg.lastSaved };
 }
 
-/* ---------- Scheduler ---------- */
 function scheduleAutoBackup() {
   if (autoBackupTimer) { clearTimeout(autoBackupTimer); autoBackupTimer = null; }
 
@@ -3046,14 +3133,12 @@ function scheduleAutoBackup() {
     }
     if (freq === 'every6hours' || freq === 'every12hours') {
       const stepHours = freq === 'every6hours' ? 6 : 12;
-      // Run at the given minute, every stepHours starting at hour 0
       const next = new Date(now);
       next.setMinutes(mm, 0, 0);
       next.setHours(Math.ceil(now.getHours() / stepHours) * stepHours);
       if (next <= now) next.setHours(next.getHours() + stepHours);
       return next - now;
     }
-    // Default: daily at hh:mm
     const next = new Date(now);
     next.setHours(hh, mm, 0, 0);
     if (next <= now) next.setDate(next.getDate() + 1);
@@ -3068,20 +3153,17 @@ function scheduleAutoBackup() {
     } catch (e) {
       console.error('[backup] scheduled backup failed:', e.message);
     } finally {
-      scheduleAutoBackup(); // re-arm
+      scheduleAutoBackup();
     }
   }, delay);
 
   console.log(`[backup] next auto backup in ${Math.round(delay / 1000)}s (${freq} @ ${cfg.time})`);
 }
 
-// Start the scheduler on boot (if config exists and is enabled)
 setTimeout(() => { try { scheduleAutoBackup(); } catch (_e) {} }, 500);
 
-/* ---------- GET /api/backup/download ---------- */
 app.get('/api/backup/download', requireAuth, async (req, res) => {
   try {
-    // Copy to a temp file so the download is consistent even if writes happen
     const tmp = path.join(__dirname, `tmp-backup-${Date.now()}.sqlite`);
     await copyDbTo(tmp);
     const filename = `inventorysystem2-backup-${backupStamp()}.sqlite`;
@@ -3107,7 +3189,6 @@ app.get('/api/backup/download', requireAuth, async (req, res) => {
   }
 });
 
-/* ---------- GET /api/backup/auto-config ---------- */
 app.get('/api/backup/auto-config', requireAuth, (req, res) => {
   const cfg = readBackupConfig() || {
     enabled: false,
@@ -3127,7 +3208,6 @@ app.get('/api/backup/auto-config', requireAuth, (req, res) => {
   });
 });
 
-/* ---------- POST /api/backup/auto-config ---------- */
 app.post('/api/backup/auto-config', requireAuth, (req, res) => {
   const b = req.body || {};
   const prev = readBackupConfig() || {};
@@ -3141,12 +3221,10 @@ app.post('/api/backup/auto-config', requireAuth, (req, res) => {
     lastSaved: prev.lastSaved || null
   };
   writeBackupConfig(next);
-  // Re-arm the scheduler with the new settings
   scheduleAutoBackup();
   res.json({ ok: true, config: next });
 });
 
-/* ---------- POST /api/backup/auto-now ---------- */
 app.post('/api/backup/auto-now', requireAuth, async (req, res) => {
   try {
     const result = await runAutoBackup('manual');
@@ -3162,14 +3240,11 @@ app.post('/api/backup/auto-now', requireAuth, async (req, res) => {
   }
 });
 
-/* ---------- POST /api/backup/restore ---------- */
 app.post('/api/backup/restore', requireAuth, restoreUpload.single('backup'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No backup file uploaded.' });
 
   const uploadedPath = req.file.path;
 
-  // Sanity-check the uploaded file is a valid SQLite database.
-  // SQLite files start with the 16-byte magic string "SQLite format 3\0".
   try {
     const fd = fs.openSync(uploadedPath, 'r');
     const header = Buffer.alloc(16);
@@ -3185,7 +3260,6 @@ app.post('/api/backup/restore', requireAuth, restoreUpload.single('backup'), asy
     return res.status(400).json({ error: `Unable to inspect uploaded file: ${e.message}` });
   }
 
-  // Take a safety snapshot of the current DB before overwriting.
   const safetyPath = path.join(__dirname, `pre-restore-safety-${backupStamp()}.sqlite`);
   try {
     await copyDbTo(safetyPath);
@@ -3194,25 +3268,17 @@ app.post('/api/backup/restore', requireAuth, restoreUpload.single('backup'), asy
     return res.status(500).json({ error: `Unable to create safety snapshot: ${e.message}` });
   }
 
-  // Close current DB, replace, and reopen.
   db.close((closeErr) => {
     if (closeErr) {
       console.error('[backup] db.close failed:', closeErr.message);
     }
 
     try {
-      // Replace main DB file
       fs.copyFileSync(uploadedPath, DB_PATH);
-      // Remove stale WAL/SHM from the old DB so the new file is used cleanly
       try { fs.unlinkSync(`${DB_PATH}-wal`); } catch (_e) {}
       try { fs.unlinkSync(`${DB_PATH}-shm`); } catch (_e) {}
-
-      // Clean up the uploaded temp file
       try { fs.unlinkSync(uploadedPath); } catch (_e) {}
 
-      // Reopen the DB (the module-level `db` is const, so we re-point the global
-      // by requiring a fresh instance — for simplicity we just reopen in place.)
-      // Note: sqlite3 Database#open is available; we use it to reopen the same handle.
       db = new sqlite3.Database(DB_PATH, (openErr) => {
         if (openErr) {
           console.error('[backup] db reopen failed:', openErr.message);
@@ -3227,7 +3293,6 @@ app.post('/api/backup/restore', requireAuth, restoreUpload.single('backup'), asy
       });
     } catch (err) {
       console.error('[backup] restore failed:', err.message);
-      // Try to reopen the original DB so the app keeps working
       try {
         db = new sqlite3.Database(DB_PATH, () => {});
       } catch (_e) {}
@@ -3244,15 +3309,14 @@ app.get('/*splat', (req, res) => {
 });
 
 /* ============================================================
-   API: DASHBOARD SUMMARY (used by dashboard.js)
-   ============================================================ */
+   API: DASHBOARD SUMMARY
+============================================================ */
 app.get('/api/dashboard-summary', (req, res) => {
     const { location } = req.query;
     const scopedLocation = req.scopeLocation || location;
     const loc = scopedLocation && String(scopedLocation).trim() ? String(scopedLocation).trim() : '';
     const locLower = loc.toLowerCase();
 
-    // ---- Helper: run a scalar query ----
     function scalar(sql, params, cb) {
         db.get(sql, params, (err, row) => {
             if (err) return cb(err);
@@ -3260,37 +3324,30 @@ app.get('/api/dashboard-summary', (req, res) => {
         });
     }
 
-    // ---- 1) Sale totals (per location) ----
     const saleWhere = [`transaction_type = 'Sale'`];
     const saleParams = [];
     if (loc) { saleWhere.push('LOWER(location) = ?'); saleParams.push(locLower); }
 
-    // ---- 2) Purchase totals (per location) ----
     const purWhere = [`transaction_type = 'Purchase'`];
     const purParams = [];
     if (loc) { purWhere.push('LOWER(location) = ?'); purParams.push(locLower); }
 
-    // ---- 3) Attendance totals (per location) ----
     const attWhere = [`1=1`];
     const attParams = [];
     if (loc) { attWhere.push('LOWER(location) = ?'); attParams.push(locLower); }
 
-    // ---- 4) Contractor totals (per location) ----
     const conWhere = [`1=1`];
     const conParams = [];
     if (loc) { conWhere.push('LOWER(e.location) = ?'); conParams.push(locLower); }
 
-    // Sale total
     scalar(`SELECT COALESCE(SUM(amount), 0) FROM purchase_sales WHERE ${saleWhere.join(' AND ')}`,
         saleParams, (e1, saleTotal) => {
         if (e1) return res.status(500).json({ error: e1.message });
 
-        // Purchase total
         scalar(`SELECT COALESCE(SUM(amount), 0) FROM purchase_sales WHERE ${purWhere.join(' AND ')}`,
             purParams, (e2, purchaseTotal) => {
             if (e2) return res.status(500).json({ error: e2.message });
 
-            // Contractor balance (work value - paid)
             db.get(
                 `SELECT
                     COALESCE(SUM(e.fabrication + e.cement_sheet + e.electrical + e.tiles +
@@ -3301,7 +3358,6 @@ app.get('/api/dashboard-summary', (req, res) => {
                 (e3, workRow) => {
                     if (e3) return res.status(500).json({ error: e3.message });
 
-                    // Attendance paid + due — read from employees table + days table
                     db.all(
                         `SELECT id, paid, location FROM attendance_employees WHERE ${attWhere.join(' AND ')}`,
                         attParams,
@@ -3316,7 +3372,6 @@ app.get('/api/dashboard-summary', (req, res) => {
                                 const toPay = Number(purchaseTotal || 0);
                                 const cash = Number(saleTotal || 0) - Number(purchaseTotal || 0);
 
-                                // Recent transactions across sale/purchase for the location
                                 const recentWhere = [`transaction_type IN ('Sale','Purchase')`];
                                 const recentParams = [];
                                 if (loc) { recentWhere.push('LOWER(location) = ?'); recentParams.push(locLower); }
@@ -3359,7 +3414,6 @@ app.get('/api/dashboard-summary', (req, res) => {
 
                             if (!empIds.length) return finish(0);
 
-                            // Get total payable from attendance_days for those employees
                             const placeholders = empIds.map(() => '?').join(',');
                             db.get(
                                 `SELECT COALESCE(SUM(rate * hours), 0) AS total
@@ -3381,9 +3435,7 @@ app.get('/api/dashboard-summary', (req, res) => {
 });
 
 /* =========================================================
-   Dashboard — Business Overview trend (current month)
-   GET /api/dashboard-trend?location=...
-   Returns: [{ date, sale, purchase }, ...]
+   Dashboard — Business Overview trend
    ========================================================= */
 app.get('/api/dashboard-trend', (req, res) => {
     try {
@@ -3432,9 +3484,7 @@ app.get('/api/dashboard-trend', (req, res) => {
 });
 
 /* =========================================================
-   Dashboard — Top Selling Products (current month, Sale only)
-   GET /api/top-selling?location=...
-   Returns: [{ item_name, amount }, ...]
+   Dashboard — Top Selling Products
    ========================================================= */
 app.get('/api/top-selling', (req, res) => {
     try {
@@ -3481,9 +3531,7 @@ app.get('/api/top-selling', (req, res) => {
 });
 
 /* =========================================================
-   Dashboard — Low Stock Alerts (today's data, < 15)
-   GET /api/dashboard-low-stock?location=...
-   Returns: [{ size, category, location, stock_at_kpr }, ...]
+   Dashboard — Low Stock Alerts
    ========================================================= */
 app.get('/api/dashboard-low-stock', (req, res) => {
     try {
@@ -3523,9 +3571,7 @@ app.get('/api/dashboard-low-stock', (req, res) => {
 });
 
 /* =========================================================
-   Dashboard — Monthly stats (current month)
-   GET /api/dashboard-monthly-stats?location=...
-   Returns: { total_sale, outstanding, total_purchase, balance_payable }
+   Dashboard — Monthly stats
    ========================================================= */
 app.get('/api/dashboard-monthly-stats', (req, res) => {
     try {
@@ -3542,7 +3588,6 @@ app.get('/api/dashboard-monthly-stats', (req, res) => {
         const nextMonth = new Date(y, m + 1, 1);
         const endISO = `${nextMonth.getFullYear()}-${pad(nextMonth.getMonth() + 1)}-01`;
 
-        // --- Sale / Purchase for current month ---
         const psWhere = [`invoice_date >= ?`, `invoice_date < ?`];
         const psParams = [startISO, endISO];
         if (location) {
@@ -3566,7 +3611,6 @@ app.get('/api/dashboard-monthly-stats', (req, res) => {
             const totalSale = Number(row && row.total_sale) || 0;
             const totalPurchase = Number(row && row.total_purchase) || 0;
 
-            // --- Contractor balance payable (all-time, filtered by location via work entries) ---
             const conWhere = ['1=1'];
             const conParams = [];
             if (location) {
@@ -3574,7 +3618,6 @@ app.get('/api/dashboard-monthly-stats', (req, res) => {
                 conParams.push(location);
             }
 
-            // Total contractor work value (based on entries + rate cards)
             const balanceSql = `
                 SELECT
                     COALESCE(SUM(
@@ -3638,7 +3681,6 @@ app.get('/api/dashboard-monthly-stats', (req, res) => {
                 }
                 const workValue = Number(workRow && workRow.work_value) || 0;
 
-                // Total paid to those contractors
                 db.get(`SELECT COALESCE(SUM(payment_amount), 0) AS total_paid FROM contractor_payments`, [], (err3, payRow) => {
                     if (err3) {
                         console.error('[dashboard-monthly-stats] pay', err3);
@@ -3646,10 +3688,6 @@ app.get('/api/dashboard-monthly-stats', (req, res) => {
                     }
                     const totalPaid = Number(payRow && payRow.total_paid) || 0;
                     const balancePayable = Math.max(workValue - totalPaid, 0);
-
-                    // Outstanding = unpaid Sale amount for current month (simplified: all Sale is considered collected already, so outstanding = 0 unless you track payments separately)
-                    // We use: Outstanding = 0 for now (no separate payment tracking on sale)
-                    // If you later add sale payment tracking, replace this with real data.
                     const outstanding = 0;
 
                     res.json({

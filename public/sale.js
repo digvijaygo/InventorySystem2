@@ -266,12 +266,64 @@
             if (!printWindow) return window.alert('Please allow pop-ups to print.');
             const gstRate = Number(transaction.cgst_percent || 0) + Number(transaction.sgst_percent || 0) + Number(transaction.igst_percent || 0);
             const taxRows = [
-                Number(transaction.cgst_amount) > 0 ? `<tr><td class="desc-cell right" colspan="8"><em>Output CGST @${Number(transaction.cgst_percent || 0)}%</em></td><td class="right">${Number(transaction.cgst_percent || 0)}%</td><td class="right">${inrNumber(transaction.cgst_amount)}</td></tr>` : '',
-                Number(transaction.sgst_amount) > 0 ? `<tr><td class="desc-cell right" colspan="8"><em>Output SGST @${Number(transaction.sgst_percent || 0)}%</em></td><td class="right">${Number(transaction.sgst_percent || 0)}%</td><td class="right">${inrNumber(transaction.sgst_amount)}</td></tr>` : '',
-                Number(transaction.igst_amount) > 0 ? `<tr><td class="desc-cell right" colspan="8"><em>Output IGST @${Number(transaction.igst_percent || 0)}%</em></td><td class="right">${Number(transaction.igst_percent || 0)}%</td><td class="right">${inrNumber(transaction.igst_amount)}</td></tr>` : ''
+                Number(transaction.cgst_amount) > 0
+                    ? `<tr>
+                          <td></td>
+                          <td class="right"><em>Output CGST @${Number(transaction.cgst_percent || 0)}%</em></td>
+                          <td></td><td></td><td></td>
+                          <td class="right">${Number(transaction.cgst_percent || 0)}</td>
+                          <td class="center">%</td>
+                          <td></td>
+                          <td class="right">${inrNumber(transaction.cgst_amount)}</td>
+                       </tr>`
+                    : '',
+                Number(transaction.sgst_amount) > 0
+                    ? `<tr>
+                          <td></td>
+                          <td class="right"><em>Output SGST @${Number(transaction.sgst_percent || 0)}%</em></td>
+                          <td></td><td></td><td></td>
+                          <td class="right">${Number(transaction.sgst_percent || 0)}</td>
+                          <td class="center">%</td>
+                          <td></td>
+                          <td class="right">${inrNumber(transaction.sgst_amount)}</td>
+                       </tr>`
+                    : '',
+                Number(transaction.igst_amount) > 0
+                    ? `<tr>
+                          <td></td>
+                          <td class="right"><em>Output IGST @${Number(transaction.igst_percent || 0)}%</em></td>
+                          <td></td><td></td><td></td>
+                          <td class="right">${Number(transaction.igst_percent || 0)}</td>
+                          <td class="center">%</td>
+                          <td></td>
+                          <td class="right">${inrNumber(transaction.igst_amount)}</td>
+                       </tr>`
+                    : ''
             ].join('');
             printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invoice ${escapeHtml(transaction.invoice_number)}</title>
-                <style>* { box-sizing: border-box; } body { font-family: Arial, sans-serif; padding: 16px; color: #000; font-size: 12px; } .title { text-align: center; font-size: 16px; font-weight: bold; letter-spacing: 1px; margin-bottom: 8px; } .invoice-box { border: 1.5px solid #000; } table.layout { width: 100%; border-collapse: collapse; } table.layout > tbody > tr > td { border: 1px solid #000; padding: 6px 8px; vertical-align: top; } .company-name { font-weight: bold; font-size: 13px; } .field-label { font-size: 10px; color: #333; } .field-value { font-weight: bold; } .party-name { font-weight: bold; font-size: 12px; } table.items { width: 100%; border-collapse: collapse; } table.items th, table.items td { border: 1px solid #000; padding: 4px 6px; font-size: 11px; } table.items th { font-weight: normal; text-align: center; } .right { text-align: right; } .center { text-align: center; } .bold { font-weight: bold; } table.taxsummary { width: 100%; border-collapse: collapse; } table.taxsummary th, table.taxsummary td { border: 1px solid #000; padding: 4px 6px; font-size: 11px; text-align: center; } .declaration { font-size: 10.5px; padding: 6px 8px; border: 1px solid #000; border-top: none; } .sign-row td { border: 1px solid #000; border-top: none; padding: 18px 8px 6px; font-size: 11px; vertical-align: bottom; } .footer-note { text-align: center; font-size: 10.5px; margin-top: 10px; }</style>
+                <style>
+                  * { box-sizing: border-box; }
+                  body { font-family: Arial, sans-serif; padding: 16px; color: #000; font-size: 12px; }
+                  .title { text-align: center; font-size: 16px; font-weight: bold; letter-spacing: 1px; margin-bottom: 8px; }
+                  .invoice-box { border: 1.5px solid #000; }
+                  table.layout { width: 100%; border-collapse: collapse; }
+                  table.layout > tbody > tr > td { border: 1px solid #000; padding: 6px 8px; vertical-align: top; }
+                  .company-name { font-weight: bold; font-size: 13px; }
+                  .field-label { font-size: 10px; color: #333; }
+                  .field-value { font-weight: bold; }
+                  .party-name { font-weight: bold; font-size: 12px; }
+                  table.items { width: 100%; border-collapse: collapse; table-layout: fixed; }
+                  table.items th, table.items td { border: 1px solid #000; padding: 4px 6px; font-size: 11px; word-wrap: break-word; vertical-align: top; }
+                  table.items th { font-weight: normal; text-align: center; }
+                  .right { text-align: right; }
+                  .center { text-align: center; }
+                  .bold { font-weight: bold; }
+                  table.taxsummary { width: 100%; border-collapse: collapse; }
+                  table.taxsummary th, table.taxsummary td { border: 1px solid #000; padding: 4px 6px; font-size: 11px; text-align: center; }
+                  .declaration { font-size: 10.5px; padding: 6px 8px; border: 1px solid #000; border-top: none; }
+                  .sign-row td { border: 1px solid #000; border-top: none; padding: 18px 8px 6px; font-size: 11px; vertical-align: bottom; }
+                  .footer-note { text-align: center; font-size: 10.5px; margin-top: 10px; }
+                </style>
             </head><body>
                 <div class="title">TAX INVOICE</div>
                 <div class="invoice-box">
@@ -283,6 +335,7 @@
                                 <div>GSTIN/UIN: ${escapeHtml(COMPANY_DETAILS.gstin)}</div>
                                 <div>State: ${escapeHtml(COMPANY_DETAILS.stateName)}, Code: ${escapeHtml(COMPANY_DETAILS.stateCode)}</div>
                                 <div>Contact: ${escapeHtml(COMPANY_DETAILS.contact)}</div>
+                                <div>E-Mail: ${escapeHtml(COMPANY_DETAILS.email)}</div>
                             </td>
                             <td><span class="field-label">Invoice No.</span><br><span class="field-value">${escapeHtml(transaction.invoice_number)}</span></td>
                             <td><span class="field-label">e-Way Bill No.</span><br><span class="field-value">${escapeHtml(transaction.ewaybill || '-')}</span></td>
@@ -309,34 +362,57 @@
                         <tr><td colspan="3"><span class="field-label">Terms of Delivery</span><br>&nbsp;</td></tr>
                     </table>
                     <table class="items">
+                        <colgroup>
+                            <col style="width:4%;">
+                            <col style="width:33%;">
+                            <col style="width:10%;">
+                            <col style="width:7%;">
+                            <col style="width:9%;">
+                            <col style="width:11%;">
+                            <col style="width:6%;">
+                            <col style="width:9%;">
+                            <col style="width:11%;">
+                        </colgroup>
                         <thead><tr>
-                            <th style="width:4%;">Sl<br>No.</th><th>Description</th><th style="width:9%;">HSN/SAC</th>
-                            <th style="width:7%;">GST<br>Rate</th><th style="width:8%;">Quantity</th>
-                            <th style="width:10%;">Rate</th><th style="width:6%;">per</th>
-                            <th style="width:7%;">Disc. %</th><th style="width:12%;">Amount</th>
+                            <th>Sr.<br>No.</th>
+                            <th>Description of Goods</th>
+                            <th>HSN/SAC</th>
+                            <th>GST<br>Rate</th>
+                            <th>Quantity</th>
+                            <th>Rate</th>
+                            <th>Per</th>
+                            <th>Disc. %</th>
+                            <th>Amount</th>
                         </tr></thead>
                         <tbody>
                             <tr>
-                                <td class="center">1</td><td>${escapeHtml(transaction.item_name)}</td>
+                                <td class="center">1</td>
+                                <td>${escapeHtml(transaction.item_name)}</td>
                                 <td class="center">${escapeHtml(transaction.hsn_code)}</td>
-                                <td class="center">${gstRate}%</td>
+                                <td class="center">${gstRate} %</td>
                                 <td class="right">${Number(transaction.quantity)} NOS</td>
                                 <td class="right">${inrNumber(transaction.rate)}</td>
-                                <td class="center">NOS</td><td></td>
+                                <td class="center">NOS</td>
+                                <td></td>
                                 <td class="right bold">${inrNumber(transaction.value_amount)}</td>
                             </tr>
                             ${taxRows}
                             <tr>
-                                <td colspan="4" class="right bold">Total</td>
+                                <td></td>
+                                <td class="right bold">Total</td>
+                                <td></td>
+                                <td></td>
                                 <td class="right bold">${Number(transaction.quantity)} NOS</td>
-                                <td colspan="3"></td>
+                                <td></td>
+                                <td></td>
+                                <td></td>
                                 <td class="right bold">₹ ${inrNumber(transaction.amount)}</td>
                             </tr>
                         </tbody>
                     </table>
                     <table class="layout"><tr><td style="width:80%;">Amount in words: <span class="bold">${amountInWords(transaction.amount)}</span></td><td class="right">E. &amp; O.E</td></tr></table>
                     <table class="taxsummary">
-                        <thead><tr><th rowspan="2">HSN/SAC</th><th rowspan="2">Taxable Value</th><th colspan="2">CGST</th><th colspan="2">SGST/UTGST</th><th rowspan="2">Total Tax</th></tr>
+                        <thead><tr><th rowspan="2">HSN/SAC</th><th rowspan="2">Taxable Value</th><th colspan="2">CGST</th><th colspan="2">SGST/UTGST</th><th rowspan="2">Total Tax Amount</th></tr>
                         <tr><th>Rate</th><th>Amount</th><th>Rate</th><th>Amount</th></tr></thead>
                         <tbody>
                             <tr>

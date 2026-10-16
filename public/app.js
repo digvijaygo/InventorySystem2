@@ -27,22 +27,32 @@
        QUICK ACTIONS → page routing
        ============================================================ */
     const QA_ROUTES = {
-        'add-sale':         { page: 'sale',           action: null },
-        'new-sale':         { page: 'sale',           action: null },
-        'estimate-quotation': { page: 'estimate', action: null },
-        'add-purchase':     { page: 'purchase',       action: null },
-        'new-purchase':     { page: 'purchase',       action: null },
-        
-        'add-contractor':   { page: 'contractors',    action: null },
-        'add-payment':      { page: 'contractors',    action: null },
-        'add-work-entry':   { page: 'contractors',    action: null },
-
-        'add-employee':     { page: 'users',          action: null },
-        
-        'add-item':         { page: 'daily-stocks',   action: null },
-        'stock-transfer':   { page: 'stock-transfer', action: null },
-        
+        'add-sale':         { page: 'sale',           action: 'newSaleBtn' },
+        'estimate':         { page: 'estimate',       action: 'newEstimateBtn' },
+        'add-purchase':     { page: 'purchase',       action: 'newPurchaseBtn' },
+        'add-contractor':   { page: 'contractors',    action: 'addContractorBtn' },
+        'add-product':      { page: 'products',       action: 'addProductBtn' },
+        'add-payment':      { page: 'contractors',    action: 'addPaymentBtn' },
+        'add-work-entry':   { page: 'contractors',    action: 'addWorkEntryBtn' },
+        'add-item':         { page: 'daily-stocks',   action: 'openAddRecordBtn' },
+        'stock-transfer':   { page: 'stock-transfer', action: 'stOpenAddBtn' },
         'reports':          { page: 'reports',        action: null },
+    };
+
+    window.is2CanQuickAction = (id) => {
+        const route = QA_ROUTES[id];
+        if (!route || typeof window.is2CanAccess !== 'function') return false;
+        return window.is2CanAccess(route.page, 'view') &&
+            (!route.action || window.is2CanAccess(route.page, 'create'));
+    };
+    window.is2RunQuickAction = (id) => {
+        if (!window.is2CanQuickAction(id)) return;
+        const route = QA_ROUTES[id];
+        showPage(route.page);
+        if (route.action) {
+            const button = document.getElementById(route.action);
+            if (button && !button.disabled && !button.hidden) button.click();
+        }
     };
 
     function loadScript(source) {
@@ -149,16 +159,16 @@
        QUICK ACTIONS DROPDOWN
        ============================================================ */
     function getActiveQuickActionIds() {
-        const key = window.IS2_QA_STORAGE_KEY || 'is2.qa.config.v1';
-        const defaultIds = [
-            'add-sale', 'add-purchase', 'estimate',
-            'payment-in', 'expense', 'transfer', 'payment-out'
+        const key = window.IS2_QA_STORAGE_KEY || 'is2.qa.config.v2';
+        const defaultIds = window.IS2_QA_DEFAULTS || [
+            'add-sale', 'add-purchase', 'add-contractor',
+            'add-product', 'stock-transfer', 'add-payment'
         ];
         try {
             const raw = localStorage.getItem(key);
             if (!raw) return defaultIds;
             const parsed = JSON.parse(raw);
-            if (!Array.isArray(parsed) || !parsed.length) return defaultIds;
+            if (!Array.isArray(parsed)) return defaultIds;
             return parsed;
         } catch (e) {
             return defaultIds;
@@ -169,12 +179,10 @@
         return window.IS2_QA_CATALOG || [
             { id: 'add-sale',      label: 'Add Sale',      icon: 'fa-cart-plus',              color: 'green'  },
             { id: 'add-purchase',  label: 'Add Purchase',  icon: 'fa-bag-shopping',           color: 'purple' },
-            { id: 'estimate',      label: 'Estimate',      icon: 'fa-file-invoice',           color: 'blue'   },
-            { id: 'payment-in',    label: 'Payment In',    icon: 'fa-money-bill',             color: 'orange' },
-            { id: 'expense',       label: 'Expense',       icon: 'fa-hand-holding-dollar',    color: 'pink'   },
-            { id: 'transfer',      label: 'Transfer',      icon: 'fa-arrow-right-arrow-left', color: 'teal'   },
-            { id: 'payment-out',   label: 'Payment Out',   icon: 'fa-money-bill-transfer',    color: 'red'    },
-            { id: 'add-party',     label: 'Add Party',     icon: 'fa-user-plus',              color: 'indigo' },
+            { id: 'add-contractor',label: 'Add Contractor',icon: 'fa-helmet-safety',          color: 'orange' },
+            { id: 'add-product',   label: 'Add Product',   icon: 'fa-box',                    color: 'blue'   },
+            { id: 'stock-transfer',label: 'New Transfer',  icon: 'fa-right-left',             color: 'purple' },
+            { id: 'add-payment',   label: 'Add Payment',   icon: 'fa-indian-rupee-sign',       color: 'green'  },
         ];
     }
 
@@ -184,6 +192,7 @@
         const byId = new Map(catalog.map((c) => [c.id, c]));
 
         return ids
+            .filter(window.is2CanQuickAction)
             .map((id) => {
                 const item = byId.get(id);
                 if (!item) return null;
@@ -215,13 +224,8 @@
 
         list.querySelectorAll('li[data-page]').forEach((li) => {
             const go = () => {
-                const page = li.dataset.page;
                 closeQuickActions();
-                if (typeof window.showPage === 'function') {
-                    window.showPage(page);
-                } else {
-                    console.warn('[quick-actions] showPage not available');
-                }
+                window.is2RunQuickAction(li.dataset.qaId);
             };
             li.addEventListener('click', go);
             li.addEventListener('keydown', (e) => {
@@ -279,7 +283,7 @@
         });
 
         window.addEventListener('storage', (e) => {
-            if (e.key === 'is2.qa.config.v1') {
+            if (e.key === (window.IS2_QA_STORAGE_KEY || 'is2.qa.config.v2')) {
                 const menu = document.getElementById('quickActionsMenu');
                 if (menu && !menu.hidden) renderQuickActions();
             }

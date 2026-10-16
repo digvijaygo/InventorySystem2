@@ -63,6 +63,7 @@
     max-height: calc(100vh - 40px);
     overflow: auto;
 }
+#userModal [hidden] { display: none !important; }
 
 .user-access-section { min-width: 0; }
 .user-access-heading { margin: 0 0 9px; }

@@ -9,7 +9,7 @@
   window.__is2QaInit = true;
 
 
-  const STORAGE_KEY = 'is2.qa.config.v1';
+  const STORAGE_KEY = 'is2.qa.config.v2';
 
 // Expose to top-nav Quick Actions dropdown in app.js
 window.IS2_QA_STORAGE_KEY = STORAGE_KEY;
@@ -20,38 +20,26 @@ window.IS2_QA_CATALOG = null;   // filled in below after CATALOG is defined
   const CATALOG = [
     { id: 'add-sale',      label: 'Add Sale',       icon: 'fa-cart-plus',             color: 'green'  },
     { id: 'add-purchase',  label: 'Add Purchase',   icon: 'fa-bag-shopping',          color: 'purple' },
-    { id: 'estimate',      label: 'Estimate',       icon: 'fa-file-invoice',          color: 'blue'   },
-    { id: 'payment-in',    label: 'Payment In',     icon: 'fa-money-bill',            color: 'orange' },
-    { id: 'expense',       label: 'Expense',        icon: 'fa-hand-holding-dollar',   color: 'pink'   },
-    { id: 'transfer',      label: 'Transfer',       icon: 'fa-arrow-right-arrow-left',color: 'teal'   },
-    { id: 'payment-out',   label: 'Payment Out',    icon: 'fa-money-bill-transfer',   color: 'red'    },
-    { id: 'add-party',     label: 'Add Party',      icon: 'fa-user-plus',             color: 'indigo' },
-
-    // your project-specific additions
     { id: 'add-contractor',label: 'Add Contractor', icon: 'fa-helmet-safety',         color: 'orange' },
+    { id: 'add-product',   label: 'Add Product',    icon: 'fa-box',                   color: 'blue'   },
+    { id: 'stock-transfer',label: 'New Transfer',   icon: 'fa-right-left',            color: 'purple' },
     { id: 'add-payment',   label: 'Add Payment',    icon: 'fa-indian-rupee-sign',     color: 'green'  },
+    { id: 'estimate',      label: 'Estimate / Quotation', icon: 'fa-file-invoice',    color: 'blue'   },
     { id: 'add-work-entry',label: 'Add Work Entry', icon: 'fa-clipboard-list',        color: 'blue'   },
-    { id: 'add-employee',  label: 'Add New Employee', icon: 'fa-id-badge',            color: 'purple' },
-    { id: 'new-sale',      label: 'New Sale',       icon: 'fa-tags',                  color: 'green'  },
-    { id: 'new-purchase',  label: 'New Purchase',   icon: 'fa-cart-shopping',         color: 'red'    },
-
-    // extras shown in your screenshot's "Available shortcuts"
-    { id: 'add-item',      label: 'Add Item',       icon: 'fa-plus',                  color: 'blue'   },
-    { id: 'sale-order',    label: 'Sale Order',     icon: 'fa-file-signature',        color: 'green'  },
-    { id: 'purchase-order',label: 'Purchase Order', icon: 'fa-file-contract',         color: 'red'    },
+    { id: 'add-item',      label: 'Add Stock Record', icon: 'fa-boxes-stacked',       color: 'blue'   },
     { id: 'reports',       label: 'Reports',        icon: 'fa-chart-line',            color: 'blue'   },
-    { id: 'stock-transfer',label: 'Stock Transfer', icon: 'fa-warehouse',             color: 'purple' },
-    { id: 'stock-adj',     label: 'Stock Adjustment',icon:'fa-sliders',               color: 'pink'   }
   ];
 
   window.IS2_QA_CATALOG = CATALOG;
 
   const DEFAULT_ACTIVE = [
-    'add-sale', 'add-purchase', 'estimate',
-    'payment-in', 'expense', 'transfer', 'payment-out'
+    'add-sale', 'add-purchase', 'add-contractor',
+    'add-product', 'stock-transfer', 'add-payment'
   ];
+  window.IS2_QA_DEFAULTS = DEFAULT_ACTIVE;
 
   const byId = (id) => CATALOG.find(c => c.id === id);
+  const canUse = (id) => typeof window.is2CanQuickAction !== 'function' || window.is2CanQuickAction(id);
 
   // ---------- state ----------
   let activeIds = loadActive();
@@ -64,7 +52,7 @@ window.IS2_QA_CATALOG = null;   // filled in below after CATALOG is defined
       if (!raw) return [...DEFAULT_ACTIVE];
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [...DEFAULT_ACTIVE];
-      return parsed.filter(id => byId(id)).slice(0, MAX_ACTIVE);
+      return [...new Set(parsed)].filter(id => byId(id)).slice(0, MAX_ACTIVE);
     } catch {
       return [...DEFAULT_ACTIVE];
     }
@@ -80,7 +68,7 @@ window.IS2_QA_CATALOG = null;   // filled in below after CATALOG is defined
   function renderGrid() {
     const grid = document.getElementById('is2QaGrid');
     if (!grid) return;
-    grid.innerHTML = activeIds.map(id => {
+    grid.innerHTML = activeIds.filter(canUse).map(id => {
       const item = byId(id);
       if (!item) return '';
       return `
@@ -120,7 +108,7 @@ window.IS2_QA_CATALOG = null;   // filled in below after CATALOG is defined
     }).join('');
 
     // available = catalog items not in workingIds
-    const available = CATALOG.filter(c => !workingIds.includes(c.id));
+    const available = CATALOG.filter(c => canUse(c.id) && !workingIds.includes(c.id));
     availEl.innerHTML = available.map(item => `
       <button type="button" class="is2-qa-chip" data-add="${item.id}">
         <i class="fas fa-plus"></i> ${item.label}
@@ -220,7 +208,7 @@ window.IS2_QA_CATALOG = null;   // filled in below after CATALOG is defined
 
   // ---------- modal open / close / save / reset ----------
   function openModal() {
-    workingIds = [...activeIds];
+    workingIds = activeIds.filter(canUse);
     const modal = document.getElementById('is2QaModal');
     if (!modal) return;
     renderModal();
@@ -243,7 +231,7 @@ window.IS2_QA_CATALOG = null;   // filled in below after CATALOG is defined
   }
 
   function resetModal() {
-    workingIds = [...DEFAULT_ACTIVE];
+    workingIds = DEFAULT_ACTIVE.filter(canUse);
     renderModal();
   }
 
@@ -587,6 +575,8 @@ window.IS2_QA_CATALOG = null;   // filled in below after CATALOG is defined
   function init() {
     const root = document.getElementById('is2-dashboard');
     if (!root) return;
+    if (root.dataset.quickActionsInitialized === '1') return;
+    root.dataset.quickActionsInitialized = '1';
 
     // initial grid
     renderGrid();
@@ -626,13 +616,10 @@ window.IS2_QA_CATALOG = null;   // filled in below after CATALOG is defined
       if (e.key === 'Escape') closeModal();
     });
 
-    // Clicking a QA item on the dashboard grid does nothing yet —
-    // wire actual navigation here later:
     document.getElementById('is2QaGrid')?.addEventListener('click', (e) => {
       const item = e.target.closest('.is2-qa-item');
       if (!item) return;
-      // TODO: navigate based on item.dataset.id
-      console.log('[QA] Clicked:', item.dataset.id);
+      window.is2RunQuickAction?.(item.dataset.id);
     });
 
     // Location filter
@@ -654,20 +641,3 @@ window.IS2_QA_CATALOG = null;   // filled in below after CATALOG is defined
 
 })();
 
-document.getElementById('is2QaGrid')?.addEventListener('click', (e) => {
-  const item = e.target.closest('.is2-qa-item');
-  if (!item) return;
-  const id = item.dataset.id;
-
-  const routes = {
-    'add-sale':       () => window.showPage && window.showPage('sale'),
-    'new-sale':       () => window.showPage && window.showPage('sale'),
-    'add-purchase':   () => window.showPage && window.showPage('purchase'),
-    'new-purchase':   () => window.showPage && window.showPage('purchase'),
-    'add-contractor': () => window.showPage && window.showPage('contractors'),
-    'add-employee':   () => window.showPage && window.showPage('users'),
-  };
-
-  if (routes[id]) routes[id]();
-  else console.log('[QA] No route for:', id);
-});
