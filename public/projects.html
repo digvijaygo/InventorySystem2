@@ -1,0 +1,608 @@
+<div class="page-view" data-page="projects" style="display:none;">
+
+    <!-- ========================================== -->
+    <!-- LIST VIEW -->
+    <!-- ========================================== -->
+    <div id="projectListView">
+        <!-- Page Header -->
+        <div class="page-header">
+            <div>
+                <h1>
+                    <i class="fa-solid fa-folder-open"></i>
+                    Projects
+                </h1>
+                <p>Manage and track all your projects</p>
+            </div>
+
+            <div class="header-actions">
+                <button class="btn btn-secondary" id="exportProjectsBtn">
+                    <i class="fa-solid fa-file-excel"></i>
+                    Export Excel
+                </button>
+                <button class="btn btn-primary" id="newProjectBtn">
+                    <i class="fa-solid fa-plus"></i>
+                    New Project
+                </button>
+            </div>
+        </div>
+
+        <!-- STAT CARDS -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-label">Total Projects</span>
+                <span class="stat-value" id="statTotalProjects">0</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Active Projects</span>
+                <span class="stat-value" id="statActiveProjects">0</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Total Project Cost</span>
+                <span class="stat-value" id="statTotalCost">₹ 0.00</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Outstanding to Vendors</span>
+                <span class="stat-value text-danger" id="statOutstanding">₹ 0.00</span>
+            </div>
+        </div>
+
+        <!-- Filter Card -->
+        <div class="filter-card">
+            <div class="filter-header">
+                <div>
+                    <h3>Project Records</h3>
+                    <p>View and manage all projects</p>
+                </div>
+                <button class="filter-toggle">
+                    <i class="fa-solid fa-filter"></i>
+                    Filters
+                </button>
+            </div>
+
+            <div class="filters">
+                <div class="form-group search-group">
+                    <label>Search</label>
+                    <div class="search-box">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input id="projectSearch" type="text" placeholder="Search name / code">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Location</label>
+                    <div class="multi-select" id="projectLocationFilterWrap">
+                        <button type="button" class="multi-select-toggle" id="projectLocationFilterToggle">
+                            <span id="projectLocationFilterLabel">All Locations</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                        <div class="multi-select-menu" id="projectLocationFilterMenu">
+                            <!-- options injected by JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Status</label>
+                    <select id="projectStatusFilter">
+                        <option value="">All Status</option>
+                        <option value="Active">Active</option>
+                        <option value="Completed">Completed</option>
+                    </select>
+                </div>
+
+                <button class="btn btn-primary apply-btn" id="applyProjectFiltersBtn">
+                    Apply
+                </button>
+            </div>
+        </div>
+
+        <!-- Table Card -->
+        <div class="table-card">
+            <div class="table-header">
+                <div>
+                    <h3>Recent Projects</h3>
+                    <span id="projectRecordCount">Showing 0 projects</span>
+                </div>
+            </div>
+
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Project Name</th>
+                            <th>Location</th>
+                            <th>Start Date</th>
+                            <th class="text-right">Total Cost</th>
+                            <th class="text-right">Paid</th>
+                            <th class="text-right">Balance</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="projectsTableBody">
+                        <tr><td class="empty-state" colspan="9">Loading projects...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination">
+                <span id="projectPaginationInfo">Showing 0 of 0 records</span>
+                <div class="page-buttons" id="projectPaginationButtons"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- DETAILS VIEW -->
+    <!-- ========================================== -->
+    <div id="projectDetailsView" style="display: none;">
+        
+        <!-- Details Header -->
+        <div class="details-header">
+            <div class="dh-left">
+                <button class="btn-back" onclick="window.closeProjectDetails()">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <div class="dh-title">
+                    <h2 id="detailProjectName">Project Name</h2>
+                    <span class="dh-code" id="detailProjectCode">PRJ-001</span>
+                    <span class="badge-status" id="detailProjectStatus">Active</span>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Tabs -->
+        <div class="details-tabs">
+            <div class="tab active" data-tab="overview">Overview</div>
+            <div class="tab" data-tab="parties">Parties</div>
+            <div class="tab" data-tab="work">Work & Materials</div>
+            <div class="tab" data-tab="payments">Payments</div>
+            <div class="tab" data-tab="transactions">Transactions</div>
+            <div class="tab" data-tab="statement">Statement</div>
+        </div>
+
+        <!-- ================= TAB: OVERVIEW ================= -->
+        <div class="tab-content" id="tab-overview">
+            <!-- Detail Stat Cards -->
+            <div class="detail-stats-grid">
+                <div class="stat-card">
+                    <span class="stat-label">Total Project Cost</span>
+                    <span class="stat-value" id="dtTotalCost">₹ 0.00</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Total Paid</span>
+                    <span class="stat-value" id="dtTotalPaid">₹ 0.00</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Outstanding to Vendors</span>
+                    <span class="stat-value text-danger" id="dtOutstanding">₹ 0.00</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Vendors</span>
+                    <span class="stat-value" id="dtVendors">0</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">Budget Remaining <small id="dtBudgetUsedPct" style="float:right; color:#0b9b72; font-size:10px;">0% used</small></span>
+                    <span class="stat-value" id="dtBudgetRemaining">₹ 0.00</span>
+                </div>
+            </div>
+
+            <!-- Two Column Layout -->
+            <div class="details-layout">
+                
+                <!-- Left Column -->
+                <div class="details-col-left">
+                    <div class="detail-box">
+                        <div class="box-header"><h3>Project Details</h3></div>
+                        <div class="box-body info-list">
+                            <div class="info-row"><span>Customer</span><strong id="dtCustomer">—</strong></div>
+                            <div class="info-row"><span>Start Date</span><strong id="dtStartDate">—</strong></div>
+                            <div class="info-row"><span>End Date</span><strong id="dtEndDate">—</strong></div>
+                            <div class="info-row"><span>Budget</span><strong id="dtBudget">—</strong></div>
+                            <div class="info-row"><span>Site Address</span><strong id="dtSiteAddress">—</strong></div>
+                        </div>
+                    </div>
+
+                    <div class="detail-box">
+                        <div class="box-header"><h3>Cost Summary</h3></div>
+                        <div class="box-body info-list">
+                            <div class="info-row"><span>Work</span><strong id="dtCostWork">₹ 0.00</strong></div>
+                            <div class="info-row"><span>Material</span><strong id="dtCostMaterial">₹ 0.00</strong></div>
+                            <div class="info-row"><span>Expenses</span><strong id="dtCostExpenses">₹ 0.00</strong></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div class="details-col-right">
+                    <div class="detail-box">
+                        <div class="box-header"><h3>Cost by Work Category</h3></div>
+                        <div class="box-body p-0">
+                            <table class="detail-table">
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th class="text-right">Qty</th>
+                                        <th class="text-right">Amount</th>
+                                        <th class="text-right">%</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dtCategoryRows">
+                                    <!-- Rows will be injected by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ================= TAB: PARTIES ================= -->
+        <div class="tab-content" id="tab-parties" style="display: none;">
+            <div class="parties-header">
+                <button class="btn btn-primary" onclick="window.openAssignPartyModal()">
+                    <i class="fa-solid fa-plus"></i> Assign Party
+                </button>
+            </div>
+            
+            <div class="table-card mt-3" style="margin-top: 15px;">
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Party</th>
+                                <th>Role</th>
+                                <th class="text-right">Total Cost</th>
+                                <th class="text-right">Paid</th>
+                                <th class="text-right">Balance</th>
+                                <th class="text-center" style="width: 80px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="partiesTableBody">
+                            <!-- Parties injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= TAB: WORK & MATERIALS ================= -->
+        <div class="tab-content" id="tab-work" style="display: none;">
+            <div class="tab-action-bar">
+                <div class="tab-buttons-right">
+                    <button type="button" class="btn btn-secondary" id="projectAddMaterial"><i class="fa-solid fa-file-invoice"></i> Add Material Bill</button>
+                    <button type="button" class="btn btn-primary" id="projectAddWork"><i class="fa-solid fa-plus"></i> Add Work Entry</button>
+                </div>
+            </div>
+            
+            <div class="table-card">
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>No.</th>
+                                <th>Party</th>
+                                <th class="text-right">Amount</th>
+                                <th class="text-center" style="width: 80px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="workTableBody">
+                            <!-- Injected by JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination">
+                    <span></span>
+                    <div class="page-buttons"><button class="active">1</button></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= TAB: PAYMENTS ================= -->
+        <div class="tab-content" id="tab-payments" style="display: none;">
+            <div class="tab-action-bar">
+                <div class="tab-buttons-right">
+                    <button type="button" class="btn btn-primary" id="projectAddPayment"><i class="fa-solid fa-plus"></i> Record Payment</button>
+                </div>
+            </div>
+            
+            <div class="table-card">
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>No.</th>
+                                <th>Party</th>
+                                <th>Paid By</th>
+                                <th>Mode</th>
+                                <th class="text-right">Amount</th>
+                                <th class="text-center" style="width: 80px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="paymentsTableBody">
+                            <!-- Injected by JS -->
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="5" style="font-weight: 600; color: #344054;">Total</td>
+                                <td class="text-right" style="font-weight: 600; color: #344054;" id="paymentsGrandTotal">₹ 0.00</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                <div class="pagination">
+                    <span></span>
+                    <div class="page-buttons"><button class="active">1</button></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= TAB: TRANSACTIONS ================= -->
+        <div class="tab-content" id="tab-transactions" style="display: none;">
+            <div class="tab-action-bar">
+                <div class="tab-buttons-right">
+                    <button type="button" class="btn btn-primary" id="projectAddExpense"><i class="fa-solid fa-plus"></i> Add Expense</button>
+                </div>
+            </div>
+            
+            <div class="table-card">
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>No.</th>
+                                <th>Party</th>
+                                <th class="text-right">Amount</th>
+                                <th class="text-center" style="width: 80px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionsTableBody">
+                            <!-- Injected by JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination">
+                    <span></span>
+                    <div class="page-buttons"><button class="active">1</button></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= TAB: STATEMENT ================= -->
+        <div class="tab-content" id="tab-statement" style="display: none;">
+            <!-- Filters & Top Bar -->
+            <div class="statement-top-bar">
+                <select id="statementPartySelect" class="stmt-select" onchange="window.loadStatement(this.value)">
+                    <option value="">Select a Party...</option>
+                </select>
+                
+                <div class="stmt-filters">
+                    <input type="date" class="stmt-date" id="stmtStartDate">
+                    <span class="stmt-dash">-</span>
+                    <input type="date" class="stmt-date" id="stmtEndDate">
+                </div>
+            </div>
+
+            <!-- Summary Bar -->
+            <div class="stmt-summary" id="stmtSummary" style="display: none;">
+                <span class="sum-billed">Billed: <strong id="stmtTotalBilled">₹ 0.00</strong></span>
+                <span class="sum-paid">Paid: <strong id="stmtTotalPaid">₹ 0.00</strong></span>
+                <span class="sum-balance" style="color: #d93035; font-weight: 700;">Balance Payable: <span id="stmtBalance">₹ 0.00</span></span>
+            </div>
+
+            <!-- Tables Container -->
+            <div class="stmt-layout" id="stmtTablesWrap" style="display: none;">
+                
+                <!-- Left: Work & Materials -->
+                <div class="stmt-col-left">
+                    <h4 class="stmt-title">Work & Materials</h4>
+                    <div class="stmt-scroll-container">
+                        <table class="stmt-table">
+                            <thead>
+                                <tr>
+                                    <th class="sticky-left">DATE</th>
+                                    <th class="text-right">FAB</th>
+                                    <th class="text-right">CEMENT</th>
+                                    <th class="text-right">ELEC</th>
+                                    <th class="text-right">PLUM</th>
+                                    <th class="text-right">INNER</th>
+                                    <th class="text-right">OUTER</th>
+                                    <th class="text-right">TILES</th>
+                                    <th class="text-right">DOOR</th>
+                                    <th class="text-right">PAINT</th>
+                                    <th class="text-right sticky-right">AMOUNT</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stmtWorkRows"></tbody>
+                            <tfoot id="stmtWorkFooter"></tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Right: Payments -->
+                <div class="stmt-col-right">
+                    <h4 class="stmt-title">Payments</h4>
+                    <div class="stmt-scroll-container">
+                        <table class="stmt-table payment-table">
+                            <thead>
+                                <tr>
+                                    <th class="text-left">DATE</th>
+                                    <th class="text-left">BY</th>
+                                    <th class="text-left">MODE</th>
+                                    <th class="text-right">AMOUNT</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stmtPaymentRows"></tbody>
+                            <tfoot id="stmtPaymentFooter"></tfoot>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <div class="modal-overlay" id="projectRecordModal" aria-hidden="true">
+        <div class="modal transaction-modal" role="dialog" aria-modal="true" aria-labelledby="projectRecordTitle">
+            <form id="projectRecordForm">
+                <div class="modal-header">
+                    <h2 id="projectRecordTitle">Add Record</h2>
+                    <button class="close-modal" id="projectRecordClose" type="button" aria-label="Close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-grid" id="projectRecordFields"></div>
+                    <p id="projectRecordStatus" role="status" aria-live="polite"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="projectRecordCancel">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="projectRecordSave">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Project Modal -->
+    <div class="modal-overlay" id="projectModal">
+        <div class="modal transaction-modal">
+            <form id="projectForm">
+                <div class="modal-header">
+                    <div>
+                        <h2 id="projectModalTitle">New Project</h2>
+                        <p>Enter the project details below.</p>
+                    </div>
+                    <button class="close-modal" type="button" aria-label="Close">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Project Name *</label>
+                            <input name="project_name" type="text" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Project Code *</label>
+                            <input name="project_code" type="text" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Select Location *</label>
+                            <select name="location" required>
+                                <option value="">Select Location</option>
+                                <option>Arneel industries karodi</option>
+                                <option>Anil industries karodi</option>
+                                <option>Anil industries ghanegoan</option>
+                                <option>Anil industries yavatmal</option>
+                                <option>Kpr projections</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Customer (Optional)</label>
+                            <input name="customer" type="text">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Start Date</label>
+                            <input name="start_date" type="date">
+                        </div>
+                        <div class="form-group">
+                            <label>End Date</label>
+                            <input name="end_date" type="date">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Status</label>
+                            <select name="status">
+                                <option value="Active">Active</option>
+                                <option value="Completed">Completed</option>
+                                <option value="On Hold">On Hold</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Budget (Optional)</label>
+                            <input name="budget" type="number" min="0" step="0.01" value="0">
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label>Site Address</label>
+                            <input name="site_address" type="text">
+                        </div>
+                        <div class="form-group full-width">
+                            <label>Description</label>
+                            <textarea name="description" rows="3"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-secondary close-modal" type="button">Cancel</button>
+                    <button class="btn btn-primary" type="submit">
+                        <i class="fa-solid fa-check"></i>
+                        <span id="saveProjectLabel">Save Project</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Assign Party Modal -->
+    <div class="modal-overlay" id="assignPartyModal">
+        <div class="modal" style="width: 500px;">
+            <form id="assignPartyForm">
+                <div class="modal-header">
+                    <div>
+                        <h2>Assign Party to Project</h2>
+                    </div>
+                    <button class="close-modal" type="button" onclick="window.closeAssignPartyModal()">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Party</label>
+                        <select name="contractor_id" id="assignPartySelect" required>
+                            <option value="">Search or select contractor...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label>Role</label>
+                        <select name="role">
+                            <option value="Contractor">Contractor</option>
+                            <option value="Vendor">Vendor</option>
+                            <option value="Supplier">Supplier</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label>Contract Value (optional)</label>
+                        <input name="contract_value" type="number" min="0" step="0.01" value="0">
+                    </div>
+
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label>Notes</label>
+                        <textarea name="notes" rows="3"></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" onclick="window.closeAssignPartyModal()">Cancel</button>
+                    <button class="btn btn-primary" type="submit">Assign</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+</div>

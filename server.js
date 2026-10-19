@@ -343,6 +343,7 @@ app.use('/api/dashboard-monthly-stats', authorizeModuleWithLocations('dashboard'
 app.use('/api/ca/config', authorizeModule('sharewithCA'));
 app.use('/api/ca/share', authorizeModuleWithLocations('sharewithCA'));
 app.use('/api/backup', authorizeModule('settings'));
+app.use('/api/projects', authorizeModuleWithLocations('projects'));
 
 function getTodayLocalISO() {
     const now = new Date();
@@ -700,18 +701,32 @@ function computeStatus(totalAmount, totalPayment) {
     return 'OVERPAID';
 }
 
+function pricedContractorEntries(entries, history) {
+    const defaults = { fabrication: 100, cement_sheet: 150, electrical: 200, tiles: 120,
+        plumbing: 130, door_fitting: 250, outer_colour: 80, inner_colour: 90 };
+    const sorted = [...history].sort((first, second) => String(second.effective_date || '').localeCompare(String(first.effective_date || '')) || Number(second.id) - Number(first.id));
+    return entries.map((entry) => {
+        const card = sorted.find((rate) => rate.effective_date && rate.effective_date <= entry.entry_date) || sorted[sorted.length - 1] || {};
+        const workAmounts = Object.fromEntries(WORK_KEYS.map((key) => [key,
+            n(entry[key]) * (card[key] == null ? defaults[key] : n(card[key]))]));
+        return { ...entry, work_amounts: workAmounts, amount: Object.values(workAmounts).reduce((sum, amount) => sum + amount, 0) };
+    });
+}
+
 function recalcContractor(contractorId, cb) {
-    db.get(`SELECT total_amount FROM contractors WHERE id=?`, [contractorId], (e, c) => {
-        if (e || !c) return cb && cb(e);
-        db.get(`SELECT COALESCE(SUM(payment_amount),0) AS paid FROM contractor_payments WHERE contractor_id=?`,
-            [contractorId], (e2, p) => {
-                if (e2) return cb && cb(e2);
-                const paid = n(p.paid);
-                const bal = n(c.total_amount) - paid;
-                db.run(`UPDATE contractors SET total_payment=?, balance_payable=?, payment_status=? WHERE id=?`,
-                    [paid, bal, computeStatus(n(c.total_amount), paid), contractorId],
-                    () => cb && cb(null));
-            });
+    db.all('SELECT * FROM contractor_work_entries WHERE contractor_id=?', [contractorId], (entryError, entries) => {
+        if (entryError) return cb && cb(entryError);
+        db.all('SELECT * FROM contractor_rate_cards WHERE contractor_id=?', [contractorId], (rateError, cards) => {
+            if (rateError) return cb && cb(rateError);
+            const total = pricedContractorEntries(entries || [], cards || []).reduce((sum, entry) => sum + entry.amount, 0);
+            db.get('SELECT COALESCE(SUM(payment_amount),0) AS paid FROM contractor_payments WHERE contractor_id=?',
+                [contractorId], (paymentError, payment) => {
+                    if (paymentError) return cb && cb(paymentError);
+                    const paid = n(payment.paid);
+                    db.run('UPDATE contractors SET total_amount=?, total_payment=?, balance_payable=?, payment_status=? WHERE id=?',
+                        [total, paid, total - paid, computeStatus(total, paid), contractorId], (error) => cb && cb(error));
+                });
+        });
     });
 }
 
@@ -1069,8 +1084,15 @@ app.get('/api/contractor-payments/:id/entries', (req, res) => {
         });
 });
 
+function validContractorWork(body) {
+    return Boolean(isValidDateString(body.entry_date) && getProductLocation(body.location) &&
+        WORK_KEYS.every((key) => body[key] == null || Number.isFinite(Number(body[key])) && Number(body[key]) >= 0) &&
+        WORK_KEYS.some((key) => Number(body[key]) > 0));
+}
+
 app.post('/api/contractor-payments/:id/entries', (req, res) => {
     const b = req.body || {};
+    if (!validContractorWork(b)) return res.status(400).json({ error: 'Select a date, location and at least one positive work quantity.' });
     const cid = req.params.id;
     db.run(`INSERT INTO contractor_work_entries
         (contractor_id, location, entry_date, fabrication, cement_sheet, electrical,
@@ -1079,12 +1101,17 @@ app.post('/api/contractor-payments/:id/entries', (req, res) => {
         [cid, b.location || '', b.entry_date || null, ...WORK_KEYS.map(k => n(b[k]))],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
-            res.json({ id: this.lastID });
+            const entryId = this.lastID;
+            recalcContractor(cid, (error) => {
+                if (error) return res.status(500).json({ error: error.message });
+                res.json({ id: entryId });
+            });
         });
 });
 
 app.put('/api/contractor-payments/:id/entries/:entryId', (req, res) => {
     const b = req.body || {};
+    if (!validContractorWork(b)) return res.status(400).json({ error: 'Select a date, location and at least one positive work quantity.' });
     const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
     db.run(`UPDATE contractor_work_entries SET
         location=?, entry_date=?,
@@ -1095,7 +1122,11 @@ app.put('/api/contractor-payments/:id/entries/:entryId', (req, res) => {
          req.params.entryId, req.params.id, ...locations.map((location) => location.toLowerCase())],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
-            res.json({ ok: true });
+            if (!this.changes) return res.status(404).json({ error: 'Work entry not found.' });
+            recalcContractor(req.params.id, (error) => {
+                if (error) return res.status(500).json({ error: error.message });
+                res.json({ ok: true });
+            });
         });
 });
 
@@ -1105,7 +1136,11 @@ app.delete('/api/contractor-payments/:id/entries/:entryId', (req, res) => {
         AND LOWER(location) IN (${locations.map(() => '?').join(', ')})`,
         [req.params.entryId, req.params.id, ...locations.map((location) => location.toLowerCase())], function (err) {
             if (err) return res.status(500).json({ error: err.message });
-            res.json({ ok: true });
+            if (!this.changes) return res.status(404).json({ error: 'Work entry not found.' });
+            recalcContractor(req.params.id, (error) => {
+                if (error) return res.status(500).json({ error: error.message });
+                res.json({ ok: true });
+            });
         });
 });
 
@@ -1133,6 +1168,9 @@ app.get('/api/contractor-payments/:id/transactions', (req, res) => {
 
 app.post('/api/contractor-payments/:id/payments', (req, res) => {
     const b = req.body || {};
+    if (!isValidDateString(b.payment_date) || !Number.isFinite(Number(b.payment_amount)) || Number(b.payment_amount) <= 0) {
+        return res.status(400).json({ error: 'A valid payment date and positive amount are required.' });
+    }
     if (req.auth.user.role !== 'Super Admin' && req.allowedLocations.length < SUPPORTED_LOCATIONS.length) {
         return res.status(403).json({ error: 'Contractor payments are not location-specific and require access to all locations.' });
     }
@@ -1155,6 +1193,9 @@ app.put('/api/contractor-payments/:id/payments/:paymentId', (req, res) => {
         return res.status(403).json({ error: 'Contractor payments are not location-specific and require access to all locations.' });
     }
     const b = req.body || {};
+    if (!isValidDateString(b.payment_date) || !Number.isFinite(Number(b.payment_amount)) || Number(b.payment_amount) <= 0) {
+        return res.status(400).json({ error: 'A valid payment date and positive amount are required.' });
+    }
     const cid = req.params.id;
     db.run(`UPDATE contractor_payments SET
         payment_date=?, payment_amount=?, payment_mode=?, paid_by=?, remarks=?
@@ -1239,6 +1280,54 @@ app.post('/api/contractor-rate-cards', (req, res) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ id: this.lastID });
         });
+});
+
+/* ============================================================
+   API: CONTRACTOR STATEMENT (For Projects)
+============================================================ */
+function authorizeProjectStatement(req, res, next) {
+    requireAuth(req, res, () => {
+        if (!userCan(req, 'projects', 'view') && !userCan(req, 'contractors', 'view')) {
+            return res.status(403).json({ error: 'Statement view access required.' });
+        }
+        authorizeLocations(req, res, next);
+    });
+}
+
+app.get('/api/contractors/:id/statement', authorizeProjectStatement, (req, res) => {
+    const contractorId = req.params.id;
+    const locations = req.allowedLocations;
+    
+    // 1. Fetch Contractor details
+    db.get(`SELECT id, contractor_name, total_payment, balance_payable FROM contractors WHERE id = ?`, [contractorId], (err, contractor) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!contractor) return res.status(404).json({ error: 'Contractor not found' });
+
+        // 2. Fetch Work Entries
+        db.all(`SELECT * FROM contractor_work_entries WHERE contractor_id = ?
+            AND LOWER(location) IN (${locations.map(() => '?').join(',')}) ORDER BY entry_date ASC, id ASC`,
+            [contractorId, ...locations.map((location) => location.toLowerCase())], (err, entries) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            // 3. Fetch Payments (Ordered by date)
+            db.all(`SELECT * FROM contractor_payments WHERE contractor_id = ? ORDER BY payment_date ASC, id ASC`, [contractorId], (err, payments) => {
+                if (err) return res.status(500).json({ error: err.message });
+                if (req.auth.user.role !== 'Super Admin' && req.auth.access.locations.length < SUPPORTED_LOCATIONS.length) payments = [];
+
+                db.all('SELECT * FROM contractor_rate_cards WHERE contractor_id=?', [contractorId], (rateError, cards) => {
+                    if (rateError) return res.status(500).json({ error: rateError.message });
+                    const priced = pricedContractorEntries(entries || [], cards || []);
+                    const billed = priced.reduce((sum, entry) => sum + entry.amount, 0);
+                    const paid = (payments || []).reduce((sum, payment) => sum + n(payment.payment_amount), 0);
+                    res.json({
+                        contractor: { ...contractor, total_amount: billed, total_payment: paid, balance_payable: billed - paid },
+                        entries: priced,
+                        payments: payments || []
+                    });
+                });
+            });
+        });
+    });
 });
 
 /* ============================================================
@@ -1931,6 +2020,7 @@ app.post('/api/auth/logout', (req, res) => {
 const ACCESS_MODULES = [
     'dashboard', 'sale', 'estimate', 'purchase', 'products', 'contractors',
     'attendance', 'daily-stocks', 'stock-transfer', 'inventory-report',
+    'projects',
     'reports', 'sharewithCA', 'settings'
 ];
 
@@ -3307,6 +3397,312 @@ app.post('/api/backup/restore', requireAuth, restoreUpload.single('backup'), asy
 app.get('/*splat', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
+
+/* ============================================================
+   DATABASE: PROJECTS
+============================================================ */
+db.run(`CREATE TABLE IF NOT EXISTS projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_name TEXT NOT NULL,
+    project_code TEXT NOT NULL,
+    location TEXT NOT NULL,
+    customer TEXT,
+    start_date TEXT,
+    end_date TEXT,
+    status TEXT DEFAULT 'Active',
+    budget REAL DEFAULT 0,
+    site_address TEXT,
+    description TEXT,
+    total_cost REAL DEFAULT 0,
+    paid REAL DEFAULT 0,
+    balance REAL DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+)`);
+
+/* ============================================================
+   API: PROJECTS
+============================================================ */
+app.get('/api/projects', (req, res) => {
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+    if (!locations.length) return res.json([]);
+    const locationSql = locations.map(() => '?').join(', ');
+    
+    db.all(
+        `SELECT * FROM projects WHERE LOWER(location) IN (${locationSql}) ORDER BY id DESC`,
+        locations.map(loc => loc.toLowerCase()),
+        async (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            const query = (sql, params) => new Promise((resolve, reject) => db.all(sql, params, (error, data) => error ? reject(error) : resolve(data || [])));
+            try {
+                const totals = await Promise.all((rows || []).map(async (project) => {
+                    const ids = await query('SELECT DISTINCT contractor_id FROM project_parties WHERE project_id=?', [project.id]);
+                    let work = 0;
+                    let paid = 0;
+                    for (const { contractor_id: contractorId } of ids) {
+                        const entries = await query(`SELECT * FROM contractor_work_entries WHERE contractor_id=?
+                            AND LOWER(location) IN (${locations.map(() => '?').join(',')})`, [contractorId, ...locations.map((location) => location.toLowerCase())]);
+                        const cards = await query('SELECT * FROM contractor_rate_cards WHERE contractor_id=?', [contractorId]);
+                        work += pricedContractorEntries(entries, cards).reduce((sum, entry) => sum + entry.amount, 0);
+                        if (req.auth.user.role === 'Super Admin' || req.auth.access.locations.length === SUPPORTED_LOCATIONS.length) {
+                            const payments = await query('SELECT payment_amount FROM contractor_payments WHERE contractor_id=?', [contractorId]);
+                            paid += payments.reduce((sum, payment) => sum + n(payment.payment_amount), 0);
+                        }
+                    }
+                    const transactions = await query('SELECT amount FROM project_transactions WHERE project_id=?', [project.id]);
+                    const total = work + transactions.reduce((sum, transaction) => sum + n(transaction.amount), 0);
+                    return { ...project, total_cost: total, paid, balance: total - paid };
+                }));
+                res.json(totals);
+            } catch (error) {
+                res.status(500).json({ error: 'Unable to calculate project totals.' });
+            }
+        }
+    );
+});
+
+app.post('/api/projects', (req, res) => {
+    const b = req.body || {};
+    if (!b.project_name || !b.project_code || !b.location) {
+        return res.status(400).json({ error: 'Project Name, Code, and Location are required.' });
+    }
+    
+    db.run(
+        `INSERT INTO projects (project_name, project_code, location, customer, start_date, end_date, status, budget, site_address, description, total_cost)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            b.project_name, b.project_code, b.location, b.customer || '', 
+            b.start_date || null, b.end_date || null, b.status || 'Active', 
+            Number(b.budget) || 0, b.site_address || '', b.description || '',
+            0
+        ],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.status(201).json({ id: this.lastID });
+        }
+    );
+});
+
+app.put('/api/projects/:id', (req, res) => {
+    const b = req.body || {};
+    const id = req.params.id;
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+
+    db.run(
+        `UPDATE projects SET 
+            project_name = ?, project_code = ?, location = ?, customer = ?, 
+            start_date = ?, end_date = ?, status = ?, budget = ?, 
+            site_address = ?, description = ?
+         WHERE id = ? AND LOWER(location) IN (${locations.map(() => '?').join(', ')})`,
+        [
+            b.project_name, b.project_code, b.location, b.customer || '', 
+            b.start_date || null, b.end_date || null, b.status || 'Active', 
+            Number(b.budget) || 0, b.site_address || '', b.description || '',
+            id, ...locations.map(loc => loc.toLowerCase())
+        ],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!this.changes) return res.status(404).json({ error: 'Project not found or access denied.' });
+            res.json({ ok: true });
+        }
+    );
+});
+
+app.delete('/api/projects/:id', (req, res) => {
+    const id = req.params.id;
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+
+    db.run(
+        `DELETE FROM projects WHERE id = ? AND LOWER(location) IN (${locations.map(() => '?').join(', ')})`,
+        [id, ...locations.map(loc => loc.toLowerCase())],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!this.changes) return res.status(404).json({ error: 'Project not found or access denied.' });
+            res.json({ ok: true });
+        }
+    );
+});
+
+/* ============================================================
+   DATABASE: PROJECT PARTIES
+============================================================ */
+db.run(`CREATE TABLE IF NOT EXISTS project_parties (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    contractor_id INTEGER NOT NULL,
+    role TEXT DEFAULT 'Contractor',
+    contract_value REAL DEFAULT 0,
+    notes TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY(contractor_id) REFERENCES contractors(id) ON DELETE CASCADE
+)`);
+
+/* ============================================================
+   API: PROJECT PARTIES
+============================================================ */
+db.run(`CREATE TABLE IF NOT EXISTS project_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    contractor_id INTEGER,
+    type TEXT NOT NULL CHECK(type IN ('Material', 'Expense')),
+    entry_date TEXT NOT NULL,
+    reference TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL,
+    amount REAL NOT NULL CHECK(amount >= 0),
+    FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY(contractor_id) REFERENCES contractors(id)
+)`);
+
+function authorizeProjectTransaction(req, res, next) {
+    requireAuth(req, res, () => {
+        if (!userCan(req, 'projects', actionForRequest(req))) return res.status(403).json({ error: 'Project access required.' });
+        authorizeLocations(req, res, () => {
+            const locations = req.allowedLocations;
+            db.get(`SELECT id FROM projects WHERE id=? AND LOWER(location) IN (${locations.map(() => '?').join(',')})`,
+                [req.params.projectId, ...locations.map((location) => location.toLowerCase())], (error, project) => {
+                    if (error) return res.status(500).json({ error: 'Unable to load project.' });
+                    if (!project) return res.status(404).json({ error: 'Project not found.' });
+                    next();
+                });
+        });
+    });
+}
+
+app.get('/api/projects/:projectId/transactions', authorizeProjectTransaction, (req, res) => {
+    db.all(`SELECT t.*, c.contractor_name FROM project_transactions t
+        LEFT JOIN contractors c ON c.id=t.contractor_id WHERE t.project_id=? ORDER BY t.entry_date DESC, t.id DESC`,
+        [req.params.projectId], (error, rows) => {
+            if (error) return res.status(500).json({ error: 'Unable to load project transactions.' });
+            res.json(rows || []);
+        });
+});
+
+function saveProjectTransaction(req, res) {
+    const body = req.body || {};
+    const type = body.type;
+    const description = String(body.description || '').trim();
+    const amount = Number(body.amount);
+    const date = String(body.entry_date || '');
+    const dateValue = new Date(`${date}T00:00:00.000Z`);
+    const contractorId = body.contractor_id ? Number(body.contractor_id) : null;
+    if (!['Material', 'Expense'].includes(type) || !description || !isValidDateString(date) ||
+        !Number.isFinite(dateValue.getTime()) || dateValue.toISOString().slice(0, 10) !== date ||
+        body.amount === '' || body.amount == null || !Number.isFinite(amount) || amount < 0 ||
+        (body.contractor_id && (!Number.isInteger(contractorId) || contractorId <= 0))) {
+        return res.status(400).json({ error: 'Valid type, date, description and non-negative amount are required.' });
+    }
+    const save = () => {
+        const values = [contractorId, type, date, String(body.reference || '').trim(), description, amount];
+        const sql = req.params.transactionId
+            ? `UPDATE project_transactions SET contractor_id=?, type=?, entry_date=?, reference=?, description=?, amount=? WHERE project_id=? AND id=?`
+            : `INSERT INTO project_transactions (contractor_id,type,entry_date,reference,description,amount,project_id) VALUES (?,?,?,?,?,?,?)`;
+        db.run(sql, [...values, req.params.projectId, ...(req.params.transactionId ? [req.params.transactionId] : [])], function (error) {
+            if (error) return res.status(500).json({ error: 'Unable to save project transaction.' });
+            if (req.params.transactionId && !this.changes) return res.status(404).json({ error: 'Transaction not found.' });
+            res.status(req.params.transactionId ? 200 : 201).json({ ok: true, id: this.lastID });
+        });
+    };
+    if (!contractorId) return save();
+    db.get(`SELECT id FROM project_parties WHERE project_id=? AND contractor_id=?`,
+        [req.params.projectId, contractorId], (error, party) => {
+            if (error) return res.status(500).json({ error: 'Unable to validate party.' });
+            if (!party) return res.status(400).json({ error: 'Choose a party assigned to this project.' });
+            save();
+        });
+}
+app.post('/api/projects/:projectId/transactions', authorizeProjectTransaction, saveProjectTransaction);
+app.put('/api/projects/:projectId/transactions/:transactionId', authorizeProjectTransaction, saveProjectTransaction);
+app.delete('/api/projects/:projectId/transactions/:transactionId', authorizeProjectTransaction, (req, res) => {
+    db.run('DELETE FROM project_transactions WHERE project_id=? AND id=?',
+        [req.params.projectId, req.params.transactionId], function (error) {
+            if (error) return res.status(500).json({ error: 'Unable to delete project transaction.' });
+            if (!this.changes) return res.status(404).json({ error: 'Transaction not found.' });
+            res.json({ ok: true });
+        });
+});
+
+app.get('/api/projects/:projectId/parties', (req, res) => {
+    const { projectId } = req.params;
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+    if (!locations.length) return res.json([]);
+
+    // Verify project belongs to user's location
+    db.get(`SELECT id FROM projects WHERE id = ? AND LOWER(location) IN (${locations.map(() => '?').join(', ')})`, 
+        [projectId, ...locations.map(l => l.toLowerCase())], 
+        (err, project) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!project) return res.status(403).json({ error: 'Project not found or access denied.' });
+
+            // Join with contractors table to get contractor details
+            const sql = `
+                SELECT 
+                    pp.id, pp.project_id, pp.contractor_id, pp.role, pp.contract_value, pp.notes,
+                    c.contractor_name, c.total_payment AS paid, c.balance_payable AS balance
+                FROM project_parties pp
+                JOIN contractors c ON pp.contractor_id = c.id
+                WHERE pp.project_id = ?
+                ORDER BY pp.id DESC
+            `;
+            db.all(sql, [projectId], (err, rows) => {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json(rows || []);
+            });
+        }
+    );
+});
+
+app.post('/api/projects/:projectId/parties', (req, res) => {
+    const { projectId } = req.params;
+    const b = req.body || {};
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+
+    if (!b.contractor_id) return res.status(400).json({ error: 'Contractor is required.' });
+
+    db.get(`SELECT id FROM projects WHERE id = ? AND LOWER(location) IN (${locations.map(() => '?').join(', ')})`, 
+        [projectId, ...locations.map(l => l.toLowerCase())], 
+        (err, project) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!project) return res.status(403).json({ error: 'Project not found or access denied.' });
+
+            // Check if already assigned
+            db.get(`SELECT id FROM project_parties WHERE project_id = ? AND contractor_id = ?`, [projectId, b.contractor_id], (err, existing) => {
+                if (existing) return res.status(409).json({ error: 'Contractor is already assigned to this project.' });
+
+                db.run(
+                    `INSERT INTO project_parties (project_id, contractor_id, role, contract_value, notes)
+                     VALUES (?, ?, ?, ?, ?)`,
+                    [projectId, b.contractor_id, b.role || 'Contractor', Number(b.contract_value) || 0, b.notes || ''],
+                    function (err) {
+                        if (err) return res.status(500).json({ error: err.message });
+                        res.status(201).json({ id: this.lastID });
+                    }
+                );
+            });
+        }
+    );
+});
+
+app.delete('/api/projects/:projectId/parties/:id', (req, res) => {
+    const { projectId, id } = req.params;
+    const locations = req.allowedLocations || SUPPORTED_LOCATIONS;
+
+    // Verify access
+    db.get(`SELECT id FROM projects WHERE id = ? AND LOWER(location) IN (${locations.map(() => '?').join(', ')})`, 
+        [projectId, ...locations.map(l => l.toLowerCase())], 
+        (err, project) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!project) return res.status(403).json({ error: 'Project not found or access denied.' });
+
+            db.run(`DELETE FROM project_parties WHERE id = ? AND project_id = ?`, [id, projectId], function(err) {
+                if (err) return res.status(500).json({ error: err.message });
+                if (!this.changes) return res.status(404).json({ error: 'Party assignment not found.' });
+                res.json({ ok: true });
+            });
+        }
+    );
+});
+
 
 /* ============================================================
    API: DASHBOARD SUMMARY

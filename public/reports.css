@@ -550,3 +550,9 @@
     grid-template-columns: 1fr;
   }
 }
+/* Allow tabs to scroll horizontally on smaller screens */
+#is2-reports .is2-reports-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}

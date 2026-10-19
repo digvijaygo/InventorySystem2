@@ -693,6 +693,7 @@ async function submitWorkEntry(ev) {
     if (!response || !response.ok) { alert('Work entry save failed'); return; }
     closeWorkEntryModal();
     await loadContractors($('#partySearch').value.trim());
+    window.dispatchEvent(new CustomEvent('contractor-data-changed', { detail: { source: 'contractors' } }));
 }
 
 async function deleteWorkEntry(entryId) {
@@ -701,6 +702,7 @@ async function deleteWorkEntry(entryId) {
         .catch(error => { alert('Network error: ' + error.message); return null; });
     if (!response || !response.ok) { alert('Work entry delete failed'); return; }
     await loadContractors($('#partySearch').value.trim());
+    window.dispatchEvent(new CustomEvent('contractor-data-changed', { detail: { source: 'contractors' } }));
 }
 
 async function submitContractor(ev) {
@@ -804,6 +806,7 @@ async function submitPayment(ev) {
     if (!res || !res.ok) { alert('Payment save failed'); return; }
     closePaymentModal();
     await loadContractors($('#partySearch').value.trim());
+    window.dispatchEvent(new CustomEvent('contractor-data-changed', { detail: { source: 'contractors' } }));
 }
 
 async function deletePayment(paymentId) {
@@ -812,6 +815,7 @@ async function deletePayment(paymentId) {
         .catch(error => { alert('Network error: ' + error.message); return null; });
     if (!response || !response.ok) { alert('Payment delete failed'); return; }
     await loadContractors($('#partySearch').value.trim());
+    window.dispatchEvent(new CustomEvent('contractor-data-changed', { detail: { source: 'contractors' } }));
 }
 
 /* ============================================================
@@ -896,6 +900,7 @@ async function submitRateCard(ev) {
         }
     }
 
+    window.dispatchEvent(new CustomEvent('contractor-data-changed', { detail: { source: 'contractors' } }));
     alert('Rate card saved successfully');
 }
 
@@ -1023,4 +1028,15 @@ window.initContractorPage = function initContractorPage() {
     populateLocationSelects();
     bindEvents();
     loadContractors();
+    const refreshSharedRecords = async () => {
+        state.rateHistory = {};
+        await loadContractors($('#partySearch').value.trim());
+        if (state.selectedId) await selectContractor(state.selectedId);
+    };
+    window.addEventListener('contractor-data-changed', (event) => {
+        if (event.detail?.source !== 'contractors') refreshSharedRecords();
+    });
+    window.addEventListener('is2-page-shown', (event) => {
+        if (event.detail?.page === 'contractors') refreshSharedRecords();
+    });
 };

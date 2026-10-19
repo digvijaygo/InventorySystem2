@@ -10,6 +10,7 @@
         { name: 'sale',              fragment: 'sale.html',             script: 'sale.js'        },
         { name: 'estimate',          fragment: 'estimate.html',         script: 'estimate.js' },
         { name: 'purchase',          fragment: 'purchase.html',         script: 'purchase.js'    },
+        { name: 'projects',          fragment: 'projects.html',        script: 'projects.js'    },
         { name: 'reports',           fragment: 'reports.html',          script: 'reports.js'     },
         // --- Inventory sub-pages ---
         { name: 'daily-stocks',      fragment: 'dailystocks.html',      script: 'dailystocks.js' },
@@ -93,6 +94,7 @@
         window.scrollTo(0, 0);
 
         try { localStorage.setItem(CURRENT_PAGE_KEY, pageName); } catch (e) {}
+        window.dispatchEvent(new CustomEvent('is2-page-shown', { detail: { page: pageName } }));
     }
 
     function getCurrentPage() {
@@ -365,6 +367,7 @@
                 dashboard: 'dashboard', contractors: 'contractors', products: 'products',
                 attendance: 'attendance', sale: 'sale', estimate: 'estimate',
                 purchase: 'purchase', reports: 'reports', 'daily-stocks': 'daily-stocks',
+                projects: 'projects',
                 'stock-transfer': 'stock-transfer', 'inventory-report': 'inventory-report',
                 sharewithCA: 'sharewithCA', settings: 'settings'
             };
@@ -413,6 +416,7 @@
             if (typeof window.initEstimatePage === 'function')        window.initEstimatePage();
             if (typeof window.initPurchasePage === 'function')        window.initPurchasePage();
             if (typeof window.initDashboardPage === 'function')       window.initDashboardPage();
+            if (typeof window.initProjectsPage === 'function')        window.initProjectsPage();
             if (typeof window.initReportsPage === 'function')         window.initReportsPage();
             if (typeof window.initDailyStocksPage === 'function')     window.initDailyStocksPage();
             if (typeof window.initStockTransferPage === 'function')   window.initStockTransferPage();

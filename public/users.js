@@ -16,6 +16,7 @@
         ['daily-stocks', 'Daily Stocks', 'fa-boxes-stacked'],
         ['stock-transfer', 'Stock Transfer', 'fa-right-left'],
         ['inventory-report', 'Inventory Report', 'fa-chart-column'],
+        ['projects', 'Projects', 'fa-folder-open'],
         ['reports', 'Reports', 'fa-file-lines'],
         ['sharewithCA', 'Share with CA', 'fa-share-nodes'],
         ['settings', 'Settings', 'fa-sliders']

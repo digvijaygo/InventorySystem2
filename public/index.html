@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>InventorySystem2</title>
+    <title>ARNEEL ERP SOLUTION</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="estimate.css">
     <link rel="stylesheet" href="purchase.css">
     <link rel="stylesheet" href="dashboard.css">
+    <link rel="stylesheet" href="projects.css">
     <link rel="stylesheet" href="reports.css">
     <link rel="stylesheet" href="dailystocks.css">
     <link rel="stylesheet" href="stocktransfer.css">
@@ -47,8 +48,10 @@
     </style>
 </head>
 <body>
-    <header class="top-nav">
-        <div class="logo"><i class="fa-solid fa-cube"></i><span>InventorySystem2</span></div>
+        <header class="top-nav">
+        <div class="logo" style="display: flex; align-items: center;">
+            <img src="arneel-logo.png" alt="ARNEEL ERP SOLUTION" style="height: 45px; width: auto; object-fit: contain;">
+        </div>
         <div class="search-bar">
             <i class="fa-solid fa-magnifying-glass"></i>
             <input type="text" placeholder="Search Clients, Invoices, products, transactions...">
@@ -116,6 +119,7 @@
         <li data-page="inventory-report"><i class="fa-solid fa-chart-column"></i><span>Inventory Report</span></li>
     </ul>
 </li>
+                <li data-page="projects"><i class="fa-solid fa-folder-open"></i><span>Projects</span></li>
                 <li data-page="reports"><i class="fa-solid fa-file-lines"></i><span>Reports</span></li>
                 <li data-page="sharewithCA" ><i class="fa-solid fa-share-nodes"></i><span>Share with CA</span></li>
                 <li data-page="users"><i class="fa-solid fa-user-shield"></i><span>Users &amp; Access</span></li>
