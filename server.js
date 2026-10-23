@@ -368,7 +368,7 @@ function isSupportedLocation(value) {
 /* ============================================================
    DATABASE
 ============================================================ */
-const db = new sqlite3.Database('./database.sqlite', (err) => {
+let db = new sqlite3.Database('./database.sqlite', (err) => {
     if (err) console.error(err.message);
     else console.log('Connected to SQLite database.');
 });
@@ -3107,7 +3107,19 @@ app.post('/api/ca/share/zip', requireAuth, (req, res) => {
 
 /* ============================================================
    API: SETTINGS — BACKUP & RESTORE
-============================================================ */
+   ------------------------------------------------------------
+   Snapshot strategy: SQLite `VACUUM INTO` produces a
+   transactionally consistent, self-contained single-file copy
+   of the LIVE database — including any frames that are still in
+   the WAL. This guarantees the backup always contains the most
+   recent committed writes.
+
+   (Previously this used `PRAGMA wal_checkpoint(FULL)` followed by
+   `fs.copyFileSync`, which is racy: the checkpoint can return
+   SQLITE_BUSY under load and leave recent frames in the WAL, so
+   the copied `.sqlite` was missing today's data. That's the bug
+   this fixes.)
+   ============================================================ */
 const DB_PATH          = path.join(__dirname, 'database.sqlite');
 const AUTO_BACKUP_DIR  = path.join(__dirname, 'auto-backups');
 const BACKUP_CONFIG    = path.join(__dirname, 'backup-config.json');
@@ -3138,25 +3150,26 @@ function backupStamp(d = new Date()) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
 }
 
+/**
+ * Create a fully consistent, self-contained snapshot of the live DB
+ * at `targetPath`. Uses `VACUUM INTO`, which:
+ *   - acquires a read lock on the live DB
+ *   - flushes every committed frame (including WAL frames) into the copy
+ *   - writes a single-file .sqlite with NO -wal / -shm sidecars
+ *
+ * This guarantees the backup contains the most recent writes, even
+ * if other requests are still committing to the DB while the backup
+ * runs.
+ */
 function copyDbTo(targetPath) {
   return new Promise((resolve, reject) => {
-    try {
-      db.run('PRAGMA wal_checkpoint(FULL);', (err) => {
-        if (err) { /* non-fatal */ }
-        try {
-          fs.copyFileSync(DB_PATH, targetPath);
-          const wal = `${DB_PATH}-wal`;
-          const shm = `${DB_PATH}-shm`;
-          if (fs.existsSync(wal)) try { fs.copyFileSync(wal, `${targetPath}-wal`); } catch (_e) {}
-          if (fs.existsSync(shm)) try { fs.copyFileSync(shm, `${targetPath}-shm`); } catch (_e) {}
-          resolve();
-        } catch (copyErr) {
-          reject(copyErr);
-        }
-      });
-    } catch (e) {
-      reject(e);
-    }
+    // Escape single quotes for the SQL literal. Better-sqlite3 / node-sqlite3
+    // do not parameterize PRAGMA/VACUUM arguments, so we inline the path.
+    const escapedPath = String(targetPath).replace(/'/g, "''");
+    db.run(`VACUUM INTO '${escapedPath}'`, (err) => {
+      if (err) return reject(err);
+      resolve();
+    });
   });
 }
 
@@ -3170,6 +3183,8 @@ function pruneAutoBackups(folder, keep) {
     const excess = files.slice(keep);
     excess.forEach((f) => {
       try { fs.unlinkSync(f.path); } catch (_e) {}
+      // In case an old, sidecar-based backup is lying around from a
+      // previous version, clean up its companions too.
       try { fs.unlinkSync(`${f.path}-wal`); } catch (_e) {}
       try { fs.unlinkSync(`${f.path}-shm`); } catch (_e) {}
     });
@@ -3253,8 +3268,10 @@ function scheduleAutoBackup() {
 setTimeout(() => { try { scheduleAutoBackup(); } catch (_e) {} }, 500);
 
 app.get('/api/backup/download', requireAuth, async (req, res) => {
+  const tmp = path.join(__dirname, `tmp-backup-${Date.now()}.sqlite`);
   try {
-    const tmp = path.join(__dirname, `tmp-backup-${Date.now()}.sqlite`);
+    // VACUUM INTO produces a single, self-contained, fully-checkpointed
+    // file — no -wal / -shm sidecars to worry about.
     await copyDbTo(tmp);
     const filename = `inventorysystem2-backup-${backupStamp()}.sqlite`;
 
@@ -3269,12 +3286,11 @@ app.get('/api/backup/download', requireAuth, async (req, res) => {
     });
     stream.on('close', () => {
       try { fs.unlinkSync(tmp); } catch (_e) {}
-      try { fs.unlinkSync(`${tmp}-wal`); } catch (_e) {}
-      try { fs.unlinkSync(`${tmp}-shm`); } catch (_e) {}
     });
     stream.pipe(res);
   } catch (err) {
     console.error('[backup] download failed:', err.message);
+    try { fs.unlinkSync(tmp); } catch (_e) {}
     res.status(500).json({ error: `Unable to prepare backup: ${err.message}` });
   }
 });
@@ -3334,7 +3350,14 @@ app.post('/api/backup/restore', requireAuth, restoreUpload.single('backup'), asy
   if (!req.file) return res.status(400).json({ error: 'No backup file uploaded.' });
 
   const uploadedPath = req.file.path;
+  let responded = false;
+  const respond = (status, payload) => {
+    if (responded) return;
+    responded = true;
+    res.status(status).json(payload);
+  };
 
+  // 1. Sanity-check the uploaded file is actually a SQLite database.
   try {
     const fd = fs.openSync(uploadedPath, 'r');
     const header = Buffer.alloc(16);
@@ -3343,24 +3366,27 @@ app.post('/api/backup/restore', requireAuth, restoreUpload.single('backup'), asy
     const magic = header.toString('utf8');
     if (!magic.startsWith('SQLite format 3')) {
       try { fs.unlinkSync(uploadedPath); } catch (_e) {}
-      return res.status(400).json({ error: 'Uploaded file is not a valid SQLite database.' });
+      return respond(400, { error: 'Uploaded file is not a valid SQLite database.' });
     }
   } catch (e) {
     try { fs.unlinkSync(uploadedPath); } catch (_e) {}
-    return res.status(400).json({ error: `Unable to inspect uploaded file: ${e.message}` });
+    return respond(400, { error: `Unable to inspect uploaded file: ${e.message}` });
   }
 
+  // 2. Snapshot the current DB so a bad restore can be rolled back.
   const safetyPath = path.join(__dirname, `pre-restore-safety-${backupStamp()}.sqlite`);
   try {
     await copyDbTo(safetyPath);
   } catch (e) {
     try { fs.unlinkSync(uploadedPath); } catch (_e) {}
-    return res.status(500).json({ error: `Unable to create safety snapshot: ${e.message}` });
+    return respond(500, { error: `Unable to create safety snapshot: ${e.message}` });
   }
 
+  // 3. Close, overwrite, reopen — with exactly one response.
   db.close((closeErr) => {
     if (closeErr) {
       console.error('[backup] db.close failed:', closeErr.message);
+      // Continue anyway — a hung close is better than a stuck restore.
     }
 
     try {
@@ -3368,25 +3394,38 @@ app.post('/api/backup/restore', requireAuth, restoreUpload.single('backup'), asy
       try { fs.unlinkSync(`${DB_PATH}-wal`); } catch (_e) {}
       try { fs.unlinkSync(`${DB_PATH}-shm`); } catch (_e) {}
       try { fs.unlinkSync(uploadedPath); } catch (_e) {}
+    } catch (copyErr) {
+      console.error('[backup] restore copy failed:', copyErr.message);
+      // Best-effort reopen so the server isn't dead.
+      try {
+        db = new sqlite3.Database(DB_PATH, (openErr) => {
+          if (openErr) console.error('[backup] db reopen after failed restore:', openErr.message);
+        });
+      } catch (_e) {}
+      return respond(500, { error: `Restore failed: ${copyErr.message}` });
+    }
 
+    // DB file replaced. Reopen.
+    try {
       db = new sqlite3.Database(DB_PATH, (openErr) => {
         if (openErr) {
           console.error('[backup] db reopen failed:', openErr.message);
-          return res.status(500).json({ error: `Restore succeeded but DB reopen failed: ${openErr.message}. Restart the server.` });
+          return respond(500, {
+            error: `Restore succeeded but DB reopen failed: ${openErr.message}. Restart the server.`
+          });
         }
         console.log('[backup] DB restored and reopened.');
-        res.json({
+        respond(200, {
           ok: true,
           message: 'Restore complete. Reloading…',
           safetySnapshot: safetyPath
         });
       });
-    } catch (err) {
-      console.error('[backup] restore failed:', err.message);
-      try {
-        db = new sqlite3.Database(DB_PATH, () => {});
-      } catch (_e) {}
-      res.status(500).json({ error: `Restore failed: ${err.message}` });
+    } catch (openThrow) {
+      console.error('[backup] db reopen threw:', openThrow.message);
+      return respond(500, {
+        error: `Restore succeeded but DB reopen threw: ${openThrow.message}. Restart the server.`
+      });
     }
   });
 });
@@ -3968,6 +4007,27 @@ app.get('/api/dashboard-low-stock', (req, res) => {
 
 /* =========================================================
    Dashboard — Monthly stats
+   ---------------------------------------------------------
+   balance_payable is computed to be IDENTICAL to the sum of
+   the `balance_payable` column on the Reports / Contractors
+   page when that page is filtered by
+        fromDate = first day of this month
+        toDate   = today
+        location = <selected location>
+   i.e.:
+
+     For each contractor that has ≥1 work entry whose
+     entry_date is in [startOfMonth, startOfNextMonth) and
+     whose location matches the filter:
+
+         balance(contractor) =
+             SUM(work_value of that contractor's entries in month ∩ location)
+           − SUM(payment_amount of that contractor's payments in month)
+
+     balance_payable = SUM(balance(contractor) over that set)
+
+   No clamping, no "any time" contractor set on the payment
+   side — mirrors /api/contractor-payments exactly.
    ========================================================= */
 app.get('/api/dashboard-monthly-stats', (req, res) => {
     try {
@@ -3984,6 +4044,7 @@ app.get('/api/dashboard-monthly-stats', (req, res) => {
         const nextMonth = new Date(y, m + 1, 1);
         const endISO = `${nextMonth.getFullYear()}-${pad(nextMonth.getMonth() + 1)}-01`;
 
+        // ---- Sale & Purchase for the current month ----
         const psWhere = [`invoice_date >= ?`, `invoice_date < ?`];
         const psParams = [startISO, endISO];
         if (location) {
@@ -3991,111 +4052,162 @@ app.get('/api/dashboard-monthly-stats', (req, res) => {
             psParams.push(location);
         }
 
-        const psSql = `
-            SELECT
+        db.get(
+            `SELECT
                 COALESCE(SUM(CASE WHEN transaction_type = 'Sale'     THEN amount ELSE 0 END), 0) AS total_sale,
                 COALESCE(SUM(CASE WHEN transaction_type = 'Purchase' THEN amount ELSE 0 END), 0) AS total_purchase
-            FROM purchase_sales
-            WHERE ${psWhere.join(' AND ')}
-        `;
-
-        db.get(psSql, psParams, (err, row) => {
-            if (err) {
-                console.error('[dashboard-monthly-stats]', err);
-                return res.status(500).json({ error: err.message });
-            }
-            const totalSale = Number(row && row.total_sale) || 0;
-            const totalPurchase = Number(row && row.total_purchase) || 0;
-
-            const conWhere = ['1=1'];
-            const conParams = [];
-            if (location) {
-                conWhere.push('LOWER(e.location) = ?');
-                conParams.push(location);
-            }
-
-            const balanceSql = `
-                SELECT
-                    COALESCE(SUM(
-                        e.fabrication  * COALESCE((SELECT rc.fabrication FROM contractor_rate_cards rc
-                            WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
-                            ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
-                            (SELECT rc.fabrication FROM contractor_rate_cards rc
-                            WHERE rc.contractor_id = e.contractor_id
-                            ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 100)
-                        + e.cement_sheet * COALESCE((SELECT rc.cement_sheet FROM contractor_rate_cards rc
-                            WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
-                            ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
-                            (SELECT rc.cement_sheet FROM contractor_rate_cards rc
-                            WHERE rc.contractor_id = e.contractor_id
-                            ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 150)
-                        + e.electrical   * COALESCE((SELECT rc.electrical FROM contractor_rate_cards rc
-                            WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
-                            ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
-                            (SELECT rc.electrical FROM contractor_rate_cards rc
-                            WHERE rc.contractor_id = e.contractor_id
-                            ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 200)
-                        + e.tiles        * COALESCE((SELECT rc.tiles FROM contractor_rate_cards rc
-                            WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
-                            ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
-                            (SELECT rc.tiles FROM contractor_rate_cards rc
-                            WHERE rc.contractor_id = e.contractor_id
-                            ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 120)
-                        + e.plumbing     * COALESCE((SELECT rc.plumbing FROM contractor_rate_cards rc
-                            WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
-                            ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
-                            (SELECT rc.plumbing FROM contractor_rate_cards rc
-                            WHERE rc.contractor_id = e.contractor_id
-                            ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 130)
-                        + e.door_fitting * COALESCE((SELECT rc.door_fitting FROM contractor_rate_cards rc
-                            WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
-                            ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
-                            (SELECT rc.door_fitting FROM contractor_rate_cards rc
-                            WHERE rc.contractor_id = e.contractor_id
-                            ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 250)
-                        + e.outer_colour * COALESCE((SELECT rc.outer_colour FROM contractor_rate_cards rc
-                            WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
-                            ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
-                            (SELECT rc.outer_colour FROM contractor_rate_cards rc
-                            WHERE rc.contractor_id = e.contractor_id
-                            ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 80)
-                        + e.inner_colour * COALESCE((SELECT rc.inner_colour FROM contractor_rate_cards rc
-                            WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
-                            ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
-                            (SELECT rc.inner_colour FROM contractor_rate_cards rc
-                            WHERE rc.contractor_id = e.contractor_id
-                            ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 90)
-                    ), 0) AS work_value
-                FROM contractor_work_entries e
-                WHERE ${conWhere.join(' AND ')}
-            `;
-
-            db.get(balanceSql, conParams, (err2, workRow) => {
-                if (err2) {
-                    console.error('[dashboard-monthly-stats] balance', err2);
-                    return res.status(500).json({ error: err2.message });
+             FROM purchase_sales
+             WHERE ${psWhere.join(' AND ')}`,
+            psParams,
+            (err, row) => {
+                if (err) {
+                    console.error('[dashboard-monthly-stats] sale/purchase', err);
+                    return res.status(500).json({ error: err.message });
                 }
-                const workValue = Number(workRow && workRow.work_value) || 0;
+                const totalSale     = Number(row && row.total_sale)     || 0;
+                const totalPurchase = Number(row && row.total_purchase) || 0;
 
-                db.get(`SELECT COALESCE(SUM(payment_amount), 0) AS total_paid FROM contractor_payments`, [], (err3, payRow) => {
-                    if (err3) {
-                        console.error('[dashboard-monthly-stats] pay', err3);
-                        return res.status(500).json({ error: err3.message });
+                // ---- Balance Payable: exactly the Reports formula ----
+                //
+                // 1. Identify the contractors that Reports keeps after its
+                //    EXISTS filter — those with ≥1 work entry in month ∩ location.
+                // 2. For each, compute work_value (using the same rate-card
+                //    resolution as /api/contractor-payments) and paid (payments
+                //    whose payment_date is in the same month).
+                // 3. Sum (work − paid) over those contractors.
+
+                const entryFilter = [`e.entry_date >= ?`, `e.entry_date < ?`];
+                const entryParams = [startISO, endISO];
+                if (location) {
+                    entryFilter.push('LOWER(e.location) = ?');
+                    entryParams.push(location);
+                }
+
+                // Per-contractor work value
+                const workSql = `
+                    SELECT
+                        e.contractor_id AS contractor_id,
+                        COALESCE(SUM(
+                            e.fabrication  * COALESCE(
+                                (SELECT rc.fabrication FROM contractor_rate_cards rc
+                                 WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
+                                 ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
+                                (SELECT rc.fabrication FROM contractor_rate_cards rc
+                                 WHERE rc.contractor_id = e.contractor_id
+                                 ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 100)
+                          + e.cement_sheet * COALESCE(
+                                (SELECT rc.cement_sheet FROM contractor_rate_cards rc
+                                 WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
+                                 ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
+                                (SELECT rc.cement_sheet FROM contractor_rate_cards rc
+                                 WHERE rc.contractor_id = e.contractor_id
+                                 ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 150)
+                          + e.electrical   * COALESCE(
+                                (SELECT rc.electrical FROM contractor_rate_cards rc
+                                 WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
+                                 ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
+                                (SELECT rc.electrical FROM contractor_rate_cards rc
+                                 WHERE rc.contractor_id = e.contractor_id
+                                 ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 200)
+                          + e.tiles        * COALESCE(
+                                (SELECT rc.tiles FROM contractor_rate_cards rc
+                                 WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
+                                 ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
+                                (SELECT rc.tiles FROM contractor_rate_cards rc
+                                 WHERE rc.contractor_id = e.contractor_id
+                                 ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 120)
+                          + e.plumbing     * COALESCE(
+                                (SELECT rc.plumbing FROM contractor_rate_cards rc
+                                 WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
+                                 ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
+                                (SELECT rc.plumbing FROM contractor_rate_cards rc
+                                 WHERE rc.contractor_id = e.contractor_id
+                                 ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 130)
+                          + e.door_fitting * COALESCE(
+                                (SELECT rc.door_fitting FROM contractor_rate_cards rc
+                                 WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
+                                 ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
+                                (SELECT rc.door_fitting FROM contractor_rate_cards rc
+                                 WHERE rc.contractor_id = e.contractor_id
+                                 ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 250)
+                          + e.outer_colour * COALESCE(
+                                (SELECT rc.outer_colour FROM contractor_rate_cards rc
+                                 WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
+                                 ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
+                                (SELECT rc.outer_colour FROM contractor_rate_cards rc
+                                 WHERE rc.contractor_id = e.contractor_id
+                                 ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 80)
+                          + e.inner_colour * COALESCE(
+                                (SELECT rc.inner_colour FROM contractor_rate_cards rc
+                                 WHERE rc.contractor_id = e.contractor_id AND rc.effective_date <= e.entry_date
+                                 ORDER BY rc.effective_date DESC, rc.id DESC LIMIT 1),
+                                (SELECT rc.inner_colour FROM contractor_rate_cards rc
+                                 WHERE rc.contractor_id = e.contractor_id
+                                 ORDER BY rc.effective_date ASC, rc.id ASC LIMIT 1), 90)
+                        ), 0) AS work_value
+                    FROM contractor_work_entries e
+                    WHERE ${entryFilter.join(' AND ')}
+                    GROUP BY e.contractor_id
+                `;
+
+                db.all(workSql, entryParams, (errW, workRows) => {
+                    if (errW) {
+                        console.error('[dashboard-monthly-stats] work', errW);
+                        return res.status(500).json({ error: errW.message });
                     }
-                    const totalPaid = Number(payRow && payRow.total_paid) || 0;
-                    const balancePayable = Math.max(workValue - totalPaid, 0);
-                    const outstanding = 0;
-
-                    res.json({
-                        month: `${y}-${pad(m + 1)}`,
-                        total_sale: totalSale,
-                        outstanding: outstanding,
-                        total_purchase: totalPurchase,
-                        balance_payable: balancePayable
+                    const workByContractor = new Map();
+                    (workRows || []).forEach((r) => {
+                        workByContractor.set(Number(r.contractor_id), Number(r.work_value) || 0);
                     });
+
+                    // Payments for the SAME contractors, in the SAME month.
+                    // (Contractor set = keys of workByContractor, which is
+                    //  exactly Reports' EXISTS filter.)
+                    const eligibleIds = [...workByContractor.keys()];
+                    const finish = (paidByContractor) => {
+                        let balance = 0;
+                        for (const id of eligibleIds) {
+                            const w = workByContractor.get(id) || 0;
+                            const p = paidByContractor.get(id) || 0;
+                            balance += (w - p);
+                        }
+                        res.json({
+                            month: `${y}-${pad(m + 1)}`,
+                            total_sale:      totalSale,
+                            outstanding:     0,
+                            total_purchase:  totalPurchase,
+                            balance_payable: balance   // NOT clamped, matches Reports
+                        });
+                    };
+
+                    if (!eligibleIds.length) {
+                        return finish(new Map());
+                    }
+
+                    const placeholders = eligibleIds.map(() => '?').join(',');
+                    const payParams = [startISO, endISO, ...eligibleIds];
+                    db.all(
+                        `SELECT contractor_id, COALESCE(SUM(payment_amount), 0) AS paid
+                         FROM contractor_payments
+                         WHERE payment_date >= ? AND payment_date < ?
+                           AND contractor_id IN (${placeholders})
+                         GROUP BY contractor_id`,
+                        payParams,
+                        (errP, payRows) => {
+                            if (errP) {
+                                console.error('[dashboard-monthly-stats] pay', errP);
+                                return res.status(500).json({ error: errP.message });
+                            }
+                            const paidByContractor = new Map();
+                            (payRows || []).forEach((r) => {
+                                paidByContractor.set(Number(r.contractor_id), Number(r.paid) || 0);
+                            });
+                            finish(paidByContractor);
+                        }
+                    );
                 });
-            });
-        });
+            }
+        );
     } catch (err) {
         console.error('[dashboard-monthly-stats]', err);
         res.status(500).json({ error: 'Failed to load monthly stats' });
